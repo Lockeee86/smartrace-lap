@@ -1,15 +1,13 @@
-from flask import Flask, render_template  # render_template hinzugefügt
+from flask import Flask, request, jsonify, render_template
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import os
 
 app = Flask(__name__)
-#app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///smartrace.db'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////app/data/smartrace.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///smartrace.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Datenbankmodell
 class LapData(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     timestamp = db.Column(db.Integer)
@@ -28,21 +26,13 @@ class LapData(db.Model):
     car_name = db.Column(db.String(100))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-# API Endpoint zum Empfangen der Daten
-@app.route('/')
-def index():
-    # Rendert das Template aus dem templates-Ordner
-    return render_template('index.html')
 @app.route('/api/lap-update', methods=['POST'])
 def lap_update():
     data = request.json
-
-    # Daten extrahieren
     event_data = data['event_data']
     driver_data = event_data['driver_data']
     car_data = event_data['car_data']
 
-    # Neue Datenbankzeile erstellen
     lap = LapData(
         timestamp=data['time'],
         event_type=data['event_type'],
@@ -63,14 +53,17 @@ def lap_update():
     db.session.add(lap)
     db.session.commit()
 
-    return jsonify({"status": "success", "message": "Daten gespeichert"}), 200
+    return jsonify({"status": "success"}), 200
 
-# Endpoint zum Abrufen der Daten
-@app.route('/api/laps', methods=['GET'])
+@app.route('/')
+def index():
+    # Rendert das Template aus dem templates-Ordner
+    return render_template('index.html')
+
+@app.route('/api/laps')
 def get_laps():
-    laps = LapData.query.order_by(LapData.timestamp.desc()).all()
+    laps = LapData.query.order_by(LapData.timestamp.desc()).limit(50).all()
     return jsonify([{
-        'id': lap.id,
         'timestamp': lap.timestamp,
         'driver_name': lap.driver_name,
         'car_name': lap.car_name,
@@ -79,12 +72,7 @@ def get_laps():
         'lap_pb': lap.lap_pb
     } for lap in laps])
 
-# Frontend Route
-@app.route('/')
-def index():
-    return render_template('index.html')
-
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
