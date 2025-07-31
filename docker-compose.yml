@@ -7,6 +7,7 @@ services:
       - "5000:5000"
     volumes:
       - ./app:/app
+      - ./data:/app/data
     environment:
       - FLASK_ENV=development
     restart: unless-stopped
