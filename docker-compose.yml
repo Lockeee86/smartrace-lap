@@ -1,15 +1,33 @@
 version: '3.8'
 
 services:
-  web:
-    build:
-      context: ./app
-      dockerfile: Dockerfile
+  smartrace-server:
+    build: .
+    container_name: smartrace-dashboard
     ports:
       - "5000:5000"
     volumes:
-      - ./app:/app
-    working_dir: /app
+      - ./data:/app/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
     environment:
-      - FLASK_ENV=development
+      - FLASK_ENV=production
+      - DATABASE_PATH=/app/data/smartrace.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/live-data"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Watchtower für automatische Updates
+  watchtower:
+    image: containrrr/watchtower
+    container_name: smartrace-watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=3600
     restart: unless-stopped
