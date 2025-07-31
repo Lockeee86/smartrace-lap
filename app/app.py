@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, render_template  # render_template hinzugefügt
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import os
@@ -29,6 +29,10 @@ class LapData(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # API Endpoint zum Empfangen der Daten
+@app.route('/')
+def index():
+    # Rendert das Template aus dem templates-Ordner
+    return render_template('index.html')
 @app.route('/api/lap-update', methods=['POST'])
 def lap_update():
     data = request.json
