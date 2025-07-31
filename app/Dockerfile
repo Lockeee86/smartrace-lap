@@ -8,9 +8,6 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Arbeitsverzeichnis erstellen
-RUN mkdir -p /app/templates /app/static
-
 # Python Abhängigkeiten kopieren und installieren
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
