@@ -2,12 +2,12 @@ version: '3.8'
 
 services:
   web:
-    build: ./app
+    build: .
     ports:
       - "5000:5000"
     volumes:
       - ./app:/app
-      - ./data:/app/data
+    working_dir: /app
     environment:
       - FLASK_ENV=development
     restart: unless-stopped
