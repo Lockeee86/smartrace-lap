@@ -4,7 +4,8 @@ from datetime import datetime
 import os
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///smartrace.db'
+#app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///smartrace.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////app/data/smartrace.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
