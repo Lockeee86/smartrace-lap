@@ -1,163 +1,162 @@
 :root {
+    --bs-primary: #0d6efd;
+    --bs-success: #198754;
+    --bs-warning: #ffc107;
+    --bs-danger: #dc3545;
+    --bs-info: #0dcaf0;
     --bs-dark: #212529;
-    --bs-secondary: #6c757d;
-    --racing-red: #dc3545;
-    --racing-green: #198754;
-    --racing-blue: #0d6efd;
-    --racing-yellow: #ffc107;
 }
 
 body {
+    background-color: #121212;
+    color: #ffffff;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-.navbar-brand {
-    font-size: 1.5rem;
-}
-
+/* Custom Card Styles */
 .card {
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.3);
-    transition: transform 0.2s;
+    background-color: #1e1e1e !important;
+    border: 1px solid #333 !important;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    transition: all 0.3s ease;
 }
 
 .card:hover {
     transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.4);
 }
 
-/* Leaderboard Styles */
-.leaderboard-item {
-    transition: all 0.3s ease;
-    border-left: 4px solid transparent;
+/* Navigation */
+.navbar-brand {
+    font-weight: bold;
+    font-size: 1.5rem;
 }
 
-.leaderboard-item:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+.nav-link {
+    font-weight: 500;
+    transition: color 0.3s ease;
 }
 
-.leaderboard-item.position-1 {
-    border-left-color: #ffd700;
-    background: linear-gradient(90deg, rgba(255, 215, 0, 0.1) 0%, transparent 100%);
+.nav-link:hover {
+    color: var(--bs-primary) !important;
 }
 
-.leaderboard-item.position-2 {
-    border-left-color: #c0c0c0;
-    background: linear-gradient(90deg, rgba(192, 192, 192, 0.1) 0%, transparent 100%);
+/* Tables */
+.table-dark {
+    --bs-table-bg: #1e1e1e;
+    --bs-table-border-color: #333;
 }
 
-.leaderboard-item.position-3 {
-    border-left-color: #cd7f32;
-    background: linear-gradient(90deg, rgba(205, 127, 50, 0.1) 0%, transparent 100%);
+.table-dark th {
+    border-color: #444;
+    color: #fff;
+    font-weight: 600;
 }
 
-/* Lap Time Cards */
-.lap-time-card {
-    transition: all 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+.table-dark td {
+    border-color: #333;
 }
 
-.lap-time-card:hover {
-    border-color: var(--bs-primary);
-    transform: scale(1.02);
-}
+/* Position badges */
+.position-1 { background-color: #ffd700 !important; color: #000 !important; }
+.position-2 { background-color: #c0c0c0 !important; color: #000 !important; }
+.position-3 { background-color: #cd7f32 !important; color: #fff !important; }
 
-.lap-time-best {
-    border-color: var(--racing-green) !important;
-    background: linear-gradient(135deg, rgba(25, 135, 84, 0.1) 0%, transparent 100%);
-}
-
-.lap-time-personal {
-    border-color: var(--racing-blue) !important;
-    background: linear-gradient(135deg, rgba(13, 110, 253, 0.1) 0%, transparent 100%);
-}
-
-.lap-time-slow {
-    border-color: var(--racing-red) !important;
-    background: linear-gradient(135deg, rgba(220, 53, 69, 0.1) 0%, transparent 100%);
-}
-
-/* Track SVG */
-#trackSvg, #trackDetailSvg {
+/* Track SVG styles */
+.track-container {
     background: #1a1a1a;
+    border-radius: 10px;
+    padding: 20px;
+    border: 1px solid #333;
 }
 
 .track-path {
     fill: none;
-    stroke: #ffffff;
+    stroke: #ccc;
     stroke-width: 8;
     stroke-linecap: round;
-    stroke-linejoin: round;
 }
 
 .track-border {
     fill: none;
-    stroke: #dc3545;
+    stroke: #666;
     stroke-width: 2;
     stroke-dasharray: 5,5;
 }
 
 .start-finish {
-    fill: none;
-    stroke: #198754;
-    stroke-width: 6;
+    stroke: #00ff00;
+    stroke-width: 4;
 }
 
-.sector-line {
-    fill: none;
-    stroke: #ffc107;
-    stroke-width: 2;
-    stroke-dasharray: 3,3;
+/* Chart containers */
+.chart-container {
+    position: relative;
+    height: 300px;
+    background: #1e1e1e;
+    border-radius: 8px;
+    padding: 15px;
 }
 
-/* Connection Status */
-#connectionStatus.connected {
-    color: #198754 !important;
+/* Animation for lap time updates */
+.lap-time-update {
+    animation: highlightUpdate 2s ease-in-out;
 }
 
-#connectionStatus.disconnected {
-    color: #dc3545 !important;
+@keyframes highlightUpdate {
+    0% { background-color: rgba(13, 202, 240, 0.3); }
+    100% { background-color: transparent; }
 }
 
-/* Responsive */
+/* Status indicators */
+.status-online { color: #28a745; }
+.status-offline { color: #dc3545; }
+.status-warning { color: #ffc107; }
+
+/* Responsive adjustments */
 @media (max-width: 768px) {
-    .navbar-brand {
-        font-size: 1.2rem;
+    .card-body {
+        padding: 1rem;
     }
     
-    #trackSvg {
+    .fs-1 {
+        font-size: 2rem !important;
+    }
+    
+    .chart-container {
         height: 250px;
     }
-    
-    #trackDetailSvg {
-        height: 400px;
-    }
 }
 
-/* Loading Animation */
+/* Loading spinner */
 .loading {
-    animation: pulse 2s infinite;
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255,255,255,.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
 }
 
-@keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.5; }
-    100% { opacity: 1; }
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
 
-/* Custom Scrollbar */
+/* Custom scrollbar */
 ::-webkit-scrollbar {
     width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-    background: var(--bs-dark);
+    background: #1e1e1e;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: var(--bs-secondary);
+    background: #555;
     border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: var(--bs-primary);
+    background: #777;
 }
-
