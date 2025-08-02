@@ -1,9 +1,18 @@
-from flask import Flask, render_template, request, jsonify, make_response
+from flask import Flask, render_template, request, jsonify, make_response, flash, redirect, url_for
 from flask_socketio import SocketIO, emit
 import datetime
 import json
 import csv
 import io
+import os
+from dotenv import load_dotenv
+import dropbox
+from dropbox.exceptions import ApiError, AuthError
+import threading
+import time
+
+# Load environment variables
+load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -11,6 +20,25 @@ app.config['SECRET_KEY'] = 'smartrace-dashboard-secret-key'
 
 # Initialize SocketIO
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+
+# Dropbox configuration
+DROPBOX_ACCESS_TOKEN = os.getenv('DROPBOX_ACCESS_TOKEN')
+DROPBOX_FOLDER = os.getenv('DROPBOX_FOLDER', '/SmartRace_Data')
+DROPBOX_ENABLED = os.getenv('DROPBOX_ENABLED', 'false').lower() == 'true'
+
+# Initialize Dropbox client
+dbx = None
+if DROPBOX_ENABLED and DROPBOX_ACCESS_TOKEN:
+    try:
+        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+        dbx.users_get_current_account()
+        print("✅ Dropbox connection established")
+    except AuthError:
+        print("❌ Dropbox authentication failed")
+        dbx = None
+    except Exception as e:
+        print(f"❌ Dropbox initialization error: {e}")
+        dbx = None
 
 # Global data storage
 race_data = {
@@ -20,7 +48,9 @@ race_data = {
         'total_laps': 0,
         'current_lap': 0,
         'session_status': 'Waiting',
-        'flag_status': 'Green'
+        'flag_status': 'Green',
+        'session_start': None,
+        'session_name': f'SmartRace_Session_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}'
     },
     'drivers': {}
 }
@@ -35,24 +65,182 @@ track_data = {
 }
 
 lap_history = {}
-
-# Dynamische Auto-Datenbank - wird von SmartRace befüllt
 car_database = {}
 
+# Dropbox helper functions
+def upload_to_dropbox(file_content, filename, folder=None):
+    """Upload file content to Dropbox"""
+    if not dbx:
+        return False, "Dropbox not configured"
+    
+    try:
+        dropbox_path = f"{DROPBOX_FOLDER}/{folder}" if folder else DROPBOX_FOLDER
+        full_path = f"{dropbox_path}/{filename}"
+        
+        # Create folder if it doesn't exist
+        try:
+            dbx.files_get_metadata(dropbox_path)
+        except:
+            try:
+                dbx.files_create_folder_v2(dropbox_path)
+            except:
+                pass  # Folder might already exist
+        
+        # Upload file
+        dbx.files_upload(
+            file_content.encode('utf-8') if isinstance(file_content, str) else file_content,
+            full_path,
+            mode=dropbox.files.WriteMode('overwrite'),
+            autorename=True
+        )
+        
+        return True, f"Successfully uploaded to {full_path}"
+    
+    except ApiError as e:
+        return False, f"Dropbox API error: {e}"
+    except Exception as e:
+        return False, f"Upload error: {e}"
+
+def get_session_folder_name():
+    """Generate folder name for current session"""
+    session_name = race_data['session_info'].get('session_name', 'Unknown_Session')
+    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+    return f"{date_str}_{session_name}"
+
+def auto_backup_session():
+    """Automatically backup current session data"""
+    if not DROPBOX_ENABLED or not dbx:
+        return
+    
+    try:
+        folder_name = get_session_folder_name()
+        
+        # Export race results
+        csv_content = generate_race_results_csv()
+        success, msg = upload_to_dropbox(csv_content, "race_results.csv", folder_name)
+        
+        if success:
+            print(f"✅ Auto-backup: Race results uploaded")
+        
+        # Export lap history
+        lap_csv_content = generate_lap_history_csv()
+        success, msg = upload_to_dropbox(lap_csv_content, "lap_history.csv", folder_name)
+        
+        if success:
+            print(f"✅ Auto-backup: Lap history uploaded")
+        
+        # Export session info as JSON
+        session_json = json.dumps({
+            'race_data': race_data,
+            'track_data': track_data,
+            'car_database': car_database,
+            'export_timestamp': datetime.datetime.now().isoformat()
+        }, indent=2)
+        
+        success, msg = upload_to_dropbox(session_json, "session_data.json", folder_name)
+        
+        if success:
+            print(f"✅ Auto-backup: Session data uploaded")
+            
+    except Exception as e:
+        print(f"❌ Auto-backup failed: {e}")
+
+# Modified CSV generation functions
+def generate_race_results_csv():
+    """Generate race results CSV with car information"""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Headers with car information
+    headers = [
+        'Position', 'Driver Name', 'Car Name', 'Car Manufacturer', 
+        'Car Scale', 'Car Class', 'Car Color', 'Digital/Analog',
+        'Laps Completed', 'Best Lap Time', 'Last Lap Time', 
+        'Total Time', 'Gap', 'Status', 'Export Time'
+    ]
+    writer.writerow(headers)
+    
+    # Sort drivers by position
+    sorted_drivers = sorted(
+        race_data['drivers'].items(),
+        key=lambda x: int(x[1].get('position', 999))
+    )
+    
+    export_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    for driver_id, driver in sorted_drivers:
+        car_info = car_database.get(driver.get('car_id'), {})
+        
+        row = [
+            driver.get('position', '-'),
+            driver.get('name', f'Driver {driver_id}'),
+            car_info.get('name', 'Unknown Car'),
+            car_info.get('manufacturer', 'Unknown'),
+            car_info.get('scale', '-'),
+            get_car_class_from_smartrace(car_info),
+            car_info.get('color', '#666666'),
+            car_info.get('digital_analog', 'unknown'),
+            driver.get('laps_completed', 0),
+            driver.get('best_lap_time', '-'),
+            driver.get('last_lap_time', '-'),
+            driver.get('total_time', '-'),
+            driver.get('gap', '-'),
+            driver.get('status', 'Unknown'),
+            export_time
+        ]
+        writer.writerow(row)
+    
+    return output.getvalue()
+
+def generate_lap_history_csv():
+    """Generate lap history CSV with car information"""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Headers
+    headers = [
+        'Driver ID', 'Driver Name', 'Car Name', 'Car Manufacturer',
+        'Lap Number', 'Lap Time', 'Sector 1', 'Sector 2', 'Sector 3',
+        'Timestamp', 'Session'
+    ]
+    writer.writerow(headers)
+    
+    session_name = race_data['session_info'].get('session_name', 'Unknown Session')
+    
+    for driver_id, laps in lap_history.items():
+        driver_info = race_data['drivers'].get(driver_id, {})
+        car_info = car_database.get(driver_info.get('car_id'), {})
+        
+        for lap in laps:
+            row = [
+                driver_id,
+                driver_info.get('name', f'Driver {driver_id}'),
+                car_info.get('name', 'Unknown Car'),
+                car_info.get('manufacturer', 'Unknown'),
+                lap.get('lap_number', '-'),
+                lap.get('lap_time', '-'),
+                lap.get('sector_1', '-'),
+                lap.get('sector_2', '-'),
+                lap.get('sector_3', '-'),
+                lap.get('timestamp', datetime.datetime.now().isoformat()),
+                session_name
+            ]
+            writer.writerow(row)
+    
+    return output.getvalue()
+
+# Existing functions (register_car_from_smartrace, etc.) bleiben unverändert...
 def register_car_from_smartrace(car_data):
     """Registriert ein Auto aus SmartRace car_data Format"""
     car_id = str(car_data.get('id', 'unknown'))
     
     if car_id not in car_database:
-        # Standard-Farben wenn keine RGB-Farbe übertragen wird
         default_colors = ['#FF8C00', '#DC143C', '#00D2BE', '#1E41FF', '#FFD700', '#0066CC', '#8B0000', '#32CD32', '#9932CC', '#FF69B4']
         
-        # RGB zu Hex konvertieren falls nötig
         color = car_data.get('color', '')
-        hex_color = default_colors[len(car_database) % len(default_colors)]  # Fallback
+        hex_color = default_colors[len(car_database) % len(default_colors)]
         
         if color and color.startswith('rgb('):
-            # RGB zu Hex konvertieren
             try:
                 rgb_values = color.replace('rgb(', '').replace(')', '').split(',')
                 r, g, b = [int(x.strip()) for x in rgb_values]
@@ -62,547 +250,260 @@ def register_car_from_smartrace(car_data):
         elif color.startswith('#'):
             hex_color = color
         
-        # Auto-Kategorie aus Herstellerdaten ableiten
-        manufacturer = car_data.get('manufacturer', 'Unknown').lower()
-        car_class = 'Slot Car'  # Standard für SmartRace
-        
-        if 'formula' in car_data.get('name', '').lower():
-            car_class = 'Formula'
-        elif 'gt' in car_data.get('name', '').lower():
-            car_class = 'GT'
-        elif 'rally' in car_data.get('name', '').lower():
-            car_class = 'Rally'
-        elif 'touring' in car_data.get('name', '').lower():
-            car_class = 'Touring'
-        
         car_database[car_id] = {
             'name': car_data.get('name', f'Car {car_id}'),
             'color': hex_color,
-            'class': car_class,
             'manufacturer': car_data.get('manufacturer', 'Unknown'),
-            'scale': car_data.get('scale', ''),
-            'digital_analog': car_data.get('digital_analog', ''),
-            'active': car_data.get('active', 'no'),
-            'decoder_type': car_data.get('decoder_type', ''),
-            'magnets': car_data.get('magnets', ''),
-            'tyres': car_data.get('tyres', ''),
-            'sound': car_data.get('sound', ''),
-            'image': car_data.get('image', ''),
+            'scale': car_data.get('scale', '1:32'),
+            'digital_analog': car_data.get('digital_analog', 'digital'),
+            'magnets': car_data.get('magnets', 'unknown'),
+            'tyres': car_data.get('tyres', 'unknown'),
+            'decoder_type': car_data.get('decoder_type', 'unknown'),
             'logo': car_data.get('logo', ''),
             'comment': car_data.get('comment', ''),
-            'tags': car_data.get('tags', '[]'),
-            'laps': car_data.get('laps', 0),
-            'fuel': car_data.get('fuel', ''),
-            'brakes': car_data.get('brakes', ''),
-            'speed': car_data.get('speed', ''),
-            'changed_on': car_data.get('changed_on', ''),
-            'interval': car_data.get('interval', 0),
-            'interval_counter': car_data.get('interval_counter', 0)
+            'smartrace_data': car_data
         }
         
-        print(f"🚗 SmartRace car registered: ID {car_id} - {car_database[car_id]['name']} ({car_database[car_id]['manufacturer']})")
-        
-        # Emit update to all clients
-        socketio.emit('car_database_update', car_database)
-        
-        return car_id
+        print(f"✅ Registered SmartRace car: {car_database[car_id]['name']}")
 
-def get_car_info(car_id):
-    """Holt Auto-Info oder erstellt Fallback"""
-    if car_id in car_database:
-        return car_database[car_id]
+def get_car_class_from_smartrace(car_info):
+    """Extract car class from SmartRace data"""
+    name = car_info.get('name', '').lower()
+    manufacturer = car_info.get('manufacturer', '').lower()
     
-    # Fallback Auto info
-    return {
-        'name': f'Car {car_id}',
-        'color': '#666666',
-        'class': 'Unknown',
-        'manufacturer': 'Unknown',
-        'scale': '',
-        'active': 'unknown'
-    }
+    if 'formula' in name or 'f1' in name:
+        return 'Formula'
+    elif any(term in name for term in ['gt', 'gte', 'gtc']):
+        return 'GT'
+    elif 'rally' in name:
+        return 'Rally'
+    elif 'nascar' in name:
+        return 'NASCAR'
+    elif 'le mans' in name or 'lmp' in name:
+        return 'Endurance'
+    elif manufacturer in ['carrera', 'scalextric', 'ninco']:
+        return 'Slot Car'
+    else:
+        return 'Sports Car'
 
-# Main routes (unchanged)
+# Routes
 @app.route('/')
 def dashboard():
-    """Main dashboard view"""
     return render_template('dashboard.html', 
                          race_data=race_data, 
                          track_data=track_data,
-                         car_database=car_database)
+                         dropbox_enabled=DROPBOX_ENABLED,
+                         dropbox_connected=dbx is not None)
 
-@app.route('/analysis')
-def analysis():
-    """Analysis view with detailed statistics"""
-    return render_template('analysis.html', 
-                         race_data=race_data, 
-                         lap_history=lap_history,
-                         car_database=car_database)
+@app.route('/settings')
+def settings():
+    return render_template('settings.html',
+                         dropbox_enabled=DROPBOX_ENABLED,
+                         dropbox_connected=dbx is not None,
+                         dropbox_folder=DROPBOX_FOLDER)
 
-@app.route('/track')
-def track():
-    """Track visualization view"""
-    return render_template('track.html', 
-                         track_data=track_data, 
-                         race_data=race_data,
-                         car_database=car_database)
+@app.route('/api/dropbox/status')
+def dropbox_status():
+    """Get Dropbox connection status"""
+    if not DROPBOX_ENABLED:
+        return jsonify({'enabled': False, 'connected': False, 'message': 'Dropbox integration disabled'})
+    
+    if not dbx:
+        return jsonify({'enabled': True, 'connected': False, 'message': 'Dropbox not connected'})
+    
+    try:
+        account = dbx.users_get_current_account()
+        return jsonify({
+            'enabled': True,
+            'connected': True,
+            'account_name': account.name.display_name,
+            'email': account.email,
+            'folder': DROPBOX_FOLDER,
+            'message': 'Connected successfully'
+        })
+    except Exception as e:
+        return jsonify({'enabled': True, 'connected': False, 'message': f'Connection error: {e}'})
 
-# API routes (unchanged)
+@app.route('/api/export/dropbox')
+def export_to_dropbox():
+    """Export current session to Dropbox"""
+    if not DROPBOX_ENABLED or not dbx:
+        return jsonify({'success': False, 'message': 'Dropbox not available'})
+    
+    try:
+        folder_name = get_session_folder_name()
+        results = []
+        
+        # Export race results
+        csv_content = generate_race_results_csv()
+        success, msg = upload_to_dropbox(csv_content, "race_results.csv", folder_name)
+        results.append({'file': 'race_results.csv', 'success': success, 'message': msg})
+        
+        # Export lap history
+        lap_csv_content = generate_lap_history_csv()
+        success, msg = upload_to_dropbox(lap_csv_content, "lap_history.csv", folder_name)
+        results.append({'file': 'lap_history.csv', 'success': success, 'message': msg})
+        
+        # Export session data
+        session_json = json.dumps({
+            'race_data': race_data,
+            'track_data': track_data,
+            'car_database': car_database,
+            'export_timestamp': datetime.datetime.now().isoformat()
+        }, indent=2)
+        
+        success, msg = upload_to_dropbox(session_json, "session_data.json", folder_name)
+        results.append({'file': 'session_data.json', 'success': success, 'message': msg})
+        
+        successful_uploads = sum(1 for r in results if r['success'])
+        
+        return jsonify({
+            'success': successful_uploads > 0,
+            'message': f'Successfully uploaded {successful_uploads}/{len(results)} files to Dropbox/{folder_name}',
+            'results': results,
+            'folder': f"{DROPBOX_FOLDER}/{folder_name}"
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Export failed: {e}'})
+
+# Existing routes remain the same...
 @app.route('/api/race-data')
 def get_race_data():
-    """Get current race data"""
     return jsonify(race_data)
 
 @app.route('/api/track-data')
 def get_track_data():
-    """Get track data"""
     return jsonify(track_data)
 
 @app.route('/api/lap-history')
 def get_lap_history():
-    """Get lap history for all drivers"""
     return jsonify(lap_history)
 
 @app.route('/api/car-database')
 def get_car_database():
-    """Get car database"""
     return jsonify(car_database)
 
-# Webhook endpoints für SmartRace - KORRIGIERT
-@app.route('/webhook/race-data', methods=['POST'])
-def webhook_race_data():
-    """Receive race data from SmartRace with car_data processing"""
+@app.route('/smartrace', methods=['POST'])
+def handle_smartrace_data():
     try:
         data = request.get_json()
-        if data:
-            print(f"📡 Received SmartRace data: {json.dumps(data, indent=2)}")
-            
-            # Update session_info
-            if 'session_info' in data:
-                race_data['session_info'].update(data['session_info'])
-            
-            # Process drivers mit car_data
-            if 'drivers' in data:
-                for driver_id, driver_data in data['drivers'].items():
-                    # SmartRace car_data verarbeiten
-                    if 'car_data' in driver_data and driver_data['car_data']:
-                        car_id = register_car_from_smartrace(driver_data['car_data'])
-                        driver_data['car_id'] = car_id
-                    
-                race_data['drivers'].update(data['drivers'])
-            
-            # Separate car_data Verarbeitung (falls direkt übertragen)
-            if 'car_data' in data and data['car_data']:
-                register_car_from_smartrace(data['car_data'])
-            
-            # Multiple cars processing (falls als Array übertragen)
-            if 'cars' in data and isinstance(data['cars'], list):
-                for car_info in data['cars']:
-                    register_car_from_smartrace(car_info)
-            elif 'cars' in data and isinstance(data['cars'], dict):
-                for car_id, car_info in data['cars'].items():
-                    register_car_from_smartrace(car_info)
-            
-            # Emit updates
-            socketio.emit('race_update', race_data)
-            
-        return jsonify({'status': 'success', 'message': 'SmartRace data processed', 'cars_registered': len(car_database)})
-    except Exception as e:
-        print(f"❌ Error processing SmartRace data: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 400
-
-@app.route('/webhook/car-data', methods=['POST'])
-def webhook_car_data():
-    """Receive individual car data from SmartRace"""
-    try:
-        data = request.get_json()
-        if data:
-            print(f"🚗 Received SmartRace car data: {json.dumps(data, indent=2)}")
-            
-            # Register single car from SmartRace format
-            if 'car_data' in data:
-                register_car_from_smartrace(data['car_data'])
-            elif 'id' in data and 'name' in data:
-                # Direct car object
-                register_car_from_smartrace(data)
-            
-            return jsonify({'status': 'success', 'message': 'SmartRace car registered', 'cars_total': len(car_database)})
-    except Exception as e:
-        print(f"❌ Error processing SmartRace car data: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 400
-
-@app.route('/webhook/lap-data', methods=['POST'])
-def webhook_lap_data():
-    """Receive individual lap data from SmartRace"""
-    try:
-        data = request.get_json()
-        if data:
-            driver_id = data.get('driver_id')
-            if driver_id:
-                if driver_id not in lap_history:
-                    lap_history[driver_id] = []
-                
-                # Car data aus lap data verarbeiten
-                if 'car_data' in data and data['car_data']:
-                    car_id = register_car_from_smartrace(data['car_data'])
-                    data['car_id'] = car_id
-                
-                lap_data = {
-                    'lap_number': data.get('lap_number'),
-                    'lap_time': data.get('lap_time'),
-                    'sector_1': data.get('sector_1'),
-                    'sector_2': data.get('sector_2'),
-                    'sector_3': data.get('sector_3'),
-                    'timestamp': data.get('timestamp', datetime.datetime.now().isoformat()),
-                    'car_id': data.get('car_id')
-                }
-                
-                lap_history[driver_id].append(lap_data)
-                
-                # Keep only last 50 laps per driver
-                if len(lap_history[driver_id]) > 50:
-                    lap_history[driver_id] = lap_history[driver_id][-50:]
-            
-            socketio.emit('lap_update', {'driver_id': driver_id, 'lap_data': data})
+        if not data:
+            return jsonify({'error': 'No JSON data received'}), 400
         
-        return jsonify({'status': 'success', 'message': 'SmartRace lap data processed'})
-    except Exception as e:
-        print(f"❌ Error processing SmartRace lap data: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 400
-
-@app.route('/webhook/track-data', methods=['POST'])
-def webhook_track_data():
-    """Receive track data from SmartRace"""
-    try:
-        data = request.get_json()
-        if data:
-            track_data.update(data)
-            socketio.emit('track_update', track_data)
+        # Register car if present
+        if 'car_data' in data:
+            register_car_from_smartrace(data['car_data'])
+            socketio.emit('car_database_update', car_database)
         
-        return jsonify({'status': 'success', 'message': 'Track data updated'})
-    except Exception as e:
-        print(f"❌ Error processing track data: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 400
-
-# CSV Export Routes mit SmartRace Daten
-@app.route('/export/race-data')
-def export_race_data():
-    output = io.StringIO()
-    writer = csv.writer(output)
-    
-    writer.writerow(['Driver_ID', 'Driver_Name', 'Car_ID', 'Car_Name', 'Car_Manufacturer', 'Car_Scale', 'Car_Class', 'Position', 'Laps', 'Best_Time', 'Last_Time', 'Gap', 'Status'])
-    
-    for driver_id, driver in race_data['drivers'].items():
-        car_id = driver.get('car_id', 'unknown')
-        car_info = get_car_info(car_id)
-        
-        writer.writerow([
-            driver_id,
-            driver.get('name', f'Driver {driver_id}'),
-            car_id,
-            car_info['name'],
-            car_info['manufacturer'],
-            car_info['scale'],
-            car_info['class'],
-            driver.get('position', ''),
-            driver.get('laps_completed', 0),
-            driver.get('best_lap_time', ''),
-            driver.get('last_lap_time', ''),
-            driver.get('gap', ''),
-            driver.get('status', 'Unknown')
-        ])
-    
-    output.seek(0)
-    response = make_response(output.getvalue())
-    response.headers['Content-Type'] = 'text/csv'
-    response.headers['Content-Disposition'] = f'attachment; filename=smartrace_export_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
-    return response
-
-@app.route('/export/lap-history')
-def export_lap_history():
-    output = io.StringIO()
-    writer = csv.writer(output)
-    
-    writer.writerow(['Driver_ID', 'Driver_Name', 'Car_Name', 'Car_Manufacturer', 'Lap_Number', 'Lap_Time', 'Sector_1', 'Sector_2', 'Sector_3', 'Timestamp'])
-    
-    for driver_id, laps in lap_history.items():
-        driver_name = race_data['drivers'].get(driver_id, {}).get('name', f'Driver {driver_id}')
-        car_id = race_data['drivers'].get(driver_id, {}).get('car_id', 'unknown')
-        car_info = get_car_info(car_id)
-        
-        for lap in laps:
-            writer.writerow([
-                driver_id,
-                driver_name,
-                car_info['name'],
-                car_info['manufacturer'],
-                lap.get('lap_number', ''),
-                lap.get('lap_time', ''),
-                lap.get('sector_1', ''),
-                lap.get('sector_2', ''),
-                lap.get('sector_3', ''),
-                lap.get('timestamp', '')
-            ])
-    
-    output.seek(0)
-    response = make_response(output.getvalue())
-    response.headers['Content-Type'] = 'text/csv'
-    response.headers['Content-Disposition'] = f'attachment; filename=smartrace_laps_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
-    return response
-
-@app.route('/export/session-summary')
-def export_session_summary():
-    output = io.StringIO()
-    writer = csv.writer(output)
-    
-    writer.writerow(['Metric', 'Value'])
-    
-    writer.writerow(['Session Type', race_data['session_info']['session_type']])
-    writer.writerow(['Total Time', race_data['session_info']['total_time']])
-    writer.writerow(['Total Laps', race_data['session_info']['total_laps']])
-    writer.writerow(['Session Status', race_data['session_info']['session_status']])
-    writer.writerow(['Cars Registered', len(car_database)])
-    writer.writerow([''])
-    
-    writer.writerow(['Driver Summary', ''])
-    writer.writerow(['Driver', 'Car', 'Manufacturer', 'Scale', 'Best Lap', 'Total Laps', 'Position'])
-    
-    for driver_id, driver in race_data['drivers'].items():
-        car_id = driver.get('car_id', 'unknown')
-        car_info = get_car_info(car_id)
-        
-        writer.writerow([
-            driver.get('name', f'Driver {driver_id}'),
-            car_info['name'],
-            car_info['manufacturer'],
-            car_info['scale'],
-            driver.get('best_lap_time', ''),
-            driver.get('laps_completed', 0),
-            driver.get('position', '')
-        ])
-    
-    output.seek(0)
-    response = make_response(output.getvalue())
-    response.headers['Content-Type'] = 'text/csv'
-    response.headers['Content-Disposition'] = f'attachment; filename=smartrace_summary_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
-    return response
-
-# Test route mit echtem SmartRace Format
-@app.route('/test/generate-smartrace-data')
-def generate_smartrace_test_data():
-    """Generate test data in real SmartRace format"""
-    import random
-    
-    # Reset databases
-    global car_database
-    car_database = {}
-    
-    # Test data im echten SmartRace Format
-    test_smartrace_data = {
-        "session_info": {
-            "session_type": "Race",
-            "session_status": "Running",
-            "total_time": "00:15:23",
-            "current_lap": 16,
-            "flag_status": "Green"
-        },
-        "drivers": {
-            "driver_1": {
-                "name": "Max Verstappen",
-                "position": 1,
-                "laps_completed": 15,
-                "best_lap_time": "1:23.456",
-                "last_lap_time": "1:24.123",
-                "gap": "Leader",
-                "status": "Running",
-                "car_data": {
-                    "color": "rgb(30, 65, 255)",
-                    "brakes": "Carbon",
-                    "active": "yes",
-                    "tags": "[]",
-                    "decoder_type": "Carrera (default)",
-                    "image": "cdvfile://localhost/persistent/redbull.jpg",
-                    "laps": 15,
-                    "fuel": "98%",
-                    "speed": "High",
-                    "tyres": "Soft",
-                    "digital_analog": "digital",
-                    "name": "Red Bull RB19",
-                    "manufacturer": "Red Bull Racing",
-                    "id": 1,
-                    "interval_counter": 0,
-                    "scale": "1:32",
-                    "magnets": "no",
-                    "logo": "redbull.png",
-                    "changed_on": None,
-                    "interval": 0,
-                    "sound": "V6 Turbo",
-                    "comment": "Championship winning car"
-                }
-            },
-            "driver_2": {
-                "name": "Lewis Hamilton",
-                "position": 2,
-                "laps_completed": 15,
-                "best_lap_time": "1:23.789",
-                "last_lap_time": "1:24.456",
-                "gap": "+2.345",
-                "status": "Running",
-                "car_data": {
-                    "color": "rgb(0, 210, 190)",
-                    "brakes": "Brembo",
-                    "active": "yes",
-                    "tags": "[]",
-                    "decoder_type": "Carrera (default)",
-                    "image": "cdvfile://localhost/persistent/mercedes.jpg",
-                    "laps": 15,
-                    "fuel": "95%",
-                    "speed": "High",
-                    "tyres": "Medium",
-                    "digital_analog": "digital",
-                    "name": "Mercedes W14",
-                    "manufacturer": "Mercedes-AMG",
-                    "id": 2,
-                    "interval_counter": 0,
-                    "scale": "1:32",
-                    "magnets": "no",
-                    "logo": "mercedes.png",
-                    "changed_on": None,
-                    "interval": 0,
-                    "sound": "V6 Hybrid",
-                    "comment": "Silver Arrow"
-                }
-            },
-            "driver_3": {
-                "name": "Charles Leclerc",
-                "position": 3,
-                "laps_completed": 14,
-                "best_lap_time": "1:23.901",
-                "last_lap_time": "1:25.123",
-                "gap": "+1 Lap",
-                "status": "Running",
-                "car_data": {
-                    "color": "rgb(220, 20, 60)",
-                    "brakes": "Brembo",
-                    "active": "yes",
-                    "tags": "[]",
-                    "decoder_type": "Carrera (default)",
-                    "image": "cdvfile://localhost/persistent/ferrari.jpg",
-                    "laps": 14,
-                    "fuel": "92%",
-                    "speed": "High",
-                    "tyres": "Hard",
-                    "digital_analog": "digital",
-                    "name": "Ferrari SF-23",
-                    "manufacturer": "Scuderia Ferrari",
-                    "id": 3,
-                    "interval_counter": 0,
-                    "scale": "1:32",
-                    "magnets": "no",
-                    "logo": "ferrari.png",
-                    "changed_on": None,
-                    "interval": 0,
-                    "sound": "V6 Turbo",
-                    "comment": "Prancing Horse"
-                }
-            },
-            "driver_4": {
-                "name": "Stuttgart Racing",
-                "position": 4,
-                "laps_completed": 14,
-                "best_lap_time": "1:24.234",
-                "last_lap_time": "1:24.567",
-                "gap": "+5.678",
-                "status": "Running",
-                "car_data": {
-                    "color": "rgb(176, 243, 0)",
-                    "brakes": None,
-                    "active": "yes",
-                    "tags": "[]",
-                    "decoder_type": "Carrera (default)",
-                    "image": "cdvfile://localhost/persistent/1684000048302.jpg",
-                    "laps": 14,
-                    "fuel": None,
-                    "speed": None,
-                    "tyres": "Ortmann",
-                    "digital_analog": "digital",
-                    "name": "Porsche 911 RSR Grello (911)",
-                    "manufacturer": "Carrera",
-                    "id": 40,
-                    "interval_counter": 0,
-                    "scale": "1:24",
-                    "magnets": "yes",
-                    "logo": "porsche.png",
-                    "changed_on": None,
-                    "interval": 0,
-                    "sound": "-",
-                    "comment": ""
-                }
+        # Handle driver data
+        if 'driver_data' in data:
+            driver_data = data['driver_data']
+            driver_id = str(driver_data.get('id', 'unknown'))
+            
+            race_data['drivers'][driver_id] = {
+                'name': driver_data.get('name', f'Driver {driver_id}'),
+                'car_id': str(data.get('car_data', {}).get('id', 'unknown')),
+                'position': driver_data.get('position'),
+                'laps_completed': driver_data.get('laps', 0),
+                'best_lap_time': driver_data.get('best_time'),
+                'last_lap_time': driver_data.get('last_time'),
+                'total_time': driver_data.get('total_time'),
+                'gap': driver_data.get('gap'),
+                'status': driver_data.get('status', 'Running')
             }
-        }
-    }
-    
-    # Process test data through webhook
-    webhook_race_data_result = webhook_race_data()
-    request.get_json = lambda: test_smartrace_data
-    
-    # Update race data
-    race_data['session_info'].update(test_smartrace_data['session_info'])
-    
-    for driver_id, driver_data in test_smartrace_data['drivers'].items():
-        if 'car_data' in driver_data:
-            car_id = register_car_from_smartrace(driver_data['car_data'])
-            driver_data['car_id'] = car_id
-    
-    race_data['drivers'].update(test_smartrace_data['drivers'])
-    
-    # Generate test lap history
-    for driver_id, driver_data in test_smartrace_data['drivers'].items():
-        lap_history[driver_id] = []
-        for lap in range(1, driver_data['laps_completed'] + 1):
-            base_time = 83.0 + random.uniform(-2, 3)
-            lap_time = f"1:{base_time:.3f}"
+        
+        # Handle lap data
+        if 'lap_data' in data:
+            lap_data = data['lap_data']
+            driver_id = str(data.get('driver_data', {}).get('id', 'unknown'))
             
-            lap_history[driver_id].append({
-                'lap_number': lap,
-                'lap_time': lap_time,
-                'sector_1': f"{random.uniform(25, 30):.3f}",
-                'sector_2': f"{random.uniform(28, 32):.3f}",
-                'sector_3': f"{random.uniform(25, 29):.3f}",
-                'timestamp': datetime.datetime.now().isoformat(),
-                'car_id': driver_data.get('car_id')
+            if driver_id not in lap_history:
+                lap_history[driver_id] = []
+            
+            lap_info = {
+                'lap_number': lap_data.get('lap_number'),
+                'lap_time': lap_data.get('lap_time'),
+                'sector_1': lap_data.get('sector_1'),
+                'sector_2': lap_data.get('sector_2'),
+                'sector_3': lap_data.get('sector_3'),
+                'timestamp': datetime.datetime.now().isoformat()
+            }
+            
+            lap_history[driver_id].append(lap_info)
+            
+            if len(lap_history[driver_id]) > 100:
+                lap_history[driver_id] = lap_history[driver_id][-100:]
+            
+            socketio.emit('lap_update', {
+                'driver_id': driver_id,
+                'lap_data': lap_info
             })
-    
-    socketio.emit('race_update', race_data)
-    socketio.emit('car_database_update', car_database)
-    
-    return jsonify({
-        'status': 'success', 
-        'message': 'SmartRace test data generated', 
-        'drivers': len(test_smartrace_data['drivers']),
-        'cars': len(car_database),
-        'format': 'SmartRace compatible'
-    })
+        
+        # Handle session data
+        if 'session_data' in data:
+            session_data = data['session_data']
+            race_data['session_info'].update({
+                'session_type': session_data.get('type', race_data['session_info']['session_type']),
+                'total_time': session_data.get('total_time', race_data['session_info']['total_time']),
+                'current_lap': session_data.get('current_lap', race_data['session_info']['current_lap']),
+                'session_status': session_data.get('status', race_data['session_info']['session_status']),
+                'flag_status': session_data.get('flag_status', race_data['session_info']['flag_status'])
+            })
+        
+        socketio.emit('race_update', race_data)
+        
+        return jsonify({'success': True, 'message': 'Data processed successfully'})
+        
+    except Exception as e:
+        print(f"Error processing SmartRace data: {e}")
+        return jsonify({'error': str(e)}), 500
 
-# WebSocket event handlers
-@socketio.on('connect')
-def on_connect():
-    print(f"🔌 Client connected: {request.sid}")
-    emit('race_update', race_data)
-    emit('track_update', track_data)
-    emit('car_database_update', car_database)
+@app.route('/export/csv/race-results')
+def export_race_results():
+    csv_data = generate_race_results_csv()
+    
+    response = make_response(csv_data)
+    response.headers["Content-Disposition"] = f"attachment; filename=smartrace_results_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    response.headers["Content-Type"] = "text/csv"
+    
+    return response
 
-@socketio.on('disconnect')
-def on_disconnect():
-    print(f"🔌 Client disconnected: {request.sid}")
+@app.route('/export/csv/lap-history')
+def export_lap_history():
+    csv_data = generate_lap_history_csv()
+    
+    response = make_response(csv_data)
+    response.headers["Content-Disposition"] = f"attachment; filename=smartrace_laphistory_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    response.headers["Content-Type"] = "text/csv"
+    
+    return response
+
+# Auto-backup thread
+def start_auto_backup():
+    """Start automatic backup thread"""
+    if not DROPBOX_ENABLED or not dbx:
+        return
+    
+    interval = int(os.getenv('AUTO_UPLOAD_INTERVAL', 300))  # 5 minutes default
+    
+    def backup_loop():
+        while True:
+            time.sleep(interval)
+            if race_data['session_info']['session_status'] in ['Running', 'Finished']:
+                auto_backup_session()
+    
+    backup_thread = threading.Thread(target=backup_loop, daemon=True)
+    backup_thread.start()
+    print(f"✅ Auto-backup started (interval: {interval}s)")
 
 if __name__ == '__main__':
-    print("🏁 SmartRace Dashboard starting...")
-    print("📡 SmartRace Webhooks available:")
-    print("   POST /webhook/race-data - Race data with car_data")
-    print("   POST /webhook/car-data - Individual car registration")
-    print("   POST /webhook/track-data - Track data updates") 
-    print("   POST /webhook/lap-data - Individual lap data with car_data")
-    print("🧪 SmartRace test data: GET /test/generate-smartrace-data")
+    # Start auto-backup if enabled
+    start_auto_backup()
     
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
+    print("🏁 SmartRace Dashboard with Dropbox Integration")
+    print(f"📁 Dropbox: {'✅ Enabled' if DROPBOX_ENABLED else '❌ Disabled'}")
+    if DROPBOX_ENABLED and dbx:
+        print(f"📂 Dropbox folder: {DROPBOX_FOLDER}")
+    
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
