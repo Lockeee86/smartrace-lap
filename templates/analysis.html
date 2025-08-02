@@ -1,273 +1,150 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SmartRace Data Analysis</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        /* Dark Theme Variables (gleiche wie dashboard.html) */
-        :root {
-            --bg-primary: #1a1a1a;
-            --bg-secondary: #2d2d2d;
-            --bg-card: #363636;
-            --bg-accent: #404040;
-            --text-primary: #ffffff;
-            --text-secondary: #b0b0b0;
-            --text-muted: #808080;
-            --border-color: #4a4a4a;
-            --accent-blue: #0ea5e9;
-            --accent-green: #22c55e;
-            --accent-red: #ef4444;
-            --accent-yellow: #eab308;
-            --accent-purple: #a855f7;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
-        }
+{% extends "base.html" %}
 
-        * { box-sizing: border-box; }
+{% block content %}
+<div class="row g-4">
+    <!-- Lap Time Chart -->
+    <div class="col-12">
+        <div class="card bg-secondary">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-graph-up me-2"></i>Rundenzeiten-Analyse
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="lapTimesChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
 
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            margin: 0; 
-            padding: 20px;
-            background: linear-gradient(135deg, var(--bg-primary) 0%, #252525 100%);
-            color: var(--text-primary);
-            min-height: 100vh;
-            line-height: 1.6;
-        }
+    <!-- Statistics Cards -->
+    <div class="col-md-3">
+        <div class="card bg-secondary text-center">
+            <div class="card-body">
+                <i class="bi bi-trophy-fill text-warning fs-1"></i>
+                <h5 class="mt-3">Beste Rundenzeit</h5>
+                <h3 class="text-success" id="bestLapTime">--:--.---</h3>
+                <small class="text-muted" id="bestLapDriver">---</small>
+            </div>
+        </div>
+    </div>
 
-        .container { 
-            max-width: 1400px; 
-            margin: 0 auto; 
-        }
+    <div class="col-md-3">
+        <div class="card bg-secondary text-center">
+            <div class="card-body">
+                <i class="bi bi-speedometer2 text-info fs-1"></i>
+                <h5 class="mt-3">Durchschnittszeit</h5>
+                <h3 class="text-info" id="avgLapTime">--:--.---</h3>
+                <small class="text-muted">Alle Fahrer</small>
+            </div>
+        </div>
+    </div>
 
-        .navigation {
-            background: var(--bg-card);
-            padding: 16px 24px;
-            border-radius: 12px;
-            margin-bottom: 24px;
-            display: flex;
-            gap: 16px;
-            flex-wrap: wrap;
-            border: 1px solid var(--border-color);
-        }
+    <div class="col-md-3">
+        <div class="card bg-secondary text-center">
+            <div class="card-body">
+                <i class="bi bi-flag-fill text-success fs-1"></i>
+                <h5 class="mt-3">Gesamte Runden</h5>
+                <h3 class="text-warning" id="totalRounds">---</h3>
+                <small class="text-muted">Alle Fahrer</small>
+            </div>
+        </div>
+    </div>
 
-        .nav-link {
-            color: var(--text-secondary);
-            text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
-            transition: all 0.3s ease;
-            font-weight: 500;
-        }
+    <div class="col-md-3">
+        <div class="card bg-secondary text-center">
+            <div class="card-body">
+                <i class="bi bi-people-fill text-primary fs-1"></i>
+                <h5 class="mt-3">Aktive Fahrer</h5>
+                <h3 class="text-primary" id="activeDrivers">---</h3>
+                <small class="text-muted">Im Rennen</small>
+            </div>
+        </div>
+    </div>
 
-        .nav-link:hover, .nav-link.active {
-            background: var(--accent-blue);
-            color: white;
-            transform: translateY(-1px);
-        }
+    <!-- Driver Comparison -->
+    <div class="col-12">
+        <div class="card bg-secondary">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-bar-chart me-2"></i>Fahrer-Vergleich
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="driverComparisonChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
-        .card { 
-            background: var(--bg-card);
-            padding: 24px; 
-            margin: 20px 0; 
-            border-radius: 12px; 
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border-color);
-        }
+{% block scripts %}
+<script>
+let lapTimesChart, driverComparisonChart;
 
-        .grid { 
-            display: grid; 
-            gap: 24px; 
-        }
+document.addEventListener('DOMContentLoaded', function() {
+    initializeAnalysisCharts();
+});
 
-        .grid-2 { grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); }
-        .grid-3 { grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); }
-        .grid-4 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-
-        h1 { 
-            color: var(--text-primary);
-            font-size: 2.5em;
-            font-weight: 700;
-            text-align: center;
-            margin-bottom: 30px;
-            background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-blue) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        h2 { 
-            color: var(--text-primary);
-            font-size: 1.4em;
-            font-weight: 600;
-            margin: 0 0 16px 0;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .stats-overview {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-
-        .stat-card {
-            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-accent) 100%);
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            border: 1px solid var(--border-color);
-            transition: transform 0.3s ease;
-        }
-
-        .stat-card:hover {
-            transform: translateY(-3px);
-        }
-
-        .stat-card .label {
-            color: var(--text-muted);
-            font-size: 0.9em;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-        }
-
-        .stat-card .value {
-            color: var(--text-primary);
-            font-size: 1.8em;
-            font-weight: 700;
-        }
-
-        .stat-card .subvalue {
-            color: var(--text-secondary);
-            font-size: 0.85em;
-            margin-top: 4px;
-        }
-
-        .chart-container {
-            position: relative;
-            height: 300px;
-            margin: 16px 0;
-        }
-
-        .table-container {
-            overflow-x: auto;
-            border-radius: 8px;
-            border: 1px solid var(--border-color);
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: var(--bg-secondary);
-        }
-
-        th, td {
-            padding: 12px 16px;
-            text-align: left;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        th {
-            background: var(--bg-accent);
-            color: var(--text-primary);
-            font-weight: 600;
-            font-size: 0.9em;
-        }
-
-        td {
-            color: var(--text-secondary);
-        }
-
-        tbody tr:hover {
-            background: var(--bg-accent);
-        }
-
-        .controls {
-            display: flex;
-            gap: 16px;
-            margin-bottom: 24px;
-            flex-wrap: wrap;
-        }
-
-        .btn {
-            background: linear-gradient(135deg, var(--accent-blue) 0%, #0284c7 100%);
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 0.9em;
-            transition: all 0.3s ease;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(14, 165, 233, 0.4);
-        }
-
-        .btn.secondary {
-            background: linear-gradient(135deg, var(--bg-accent) 0%, var(--bg-secondary) 100%);
-            border: 1px solid var(--border-color);
-        }
-
-        select {
-            background: var(--bg-secondary);
-            color: var(--text-primary);
-            border: 1px solid var(--border-color);
-            padding: 10px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: var(--text-muted);
-        }
-
-        .progress-indicator {
-            background: var(--bg-secondary);
-            border-radius: 10px;
-            height: 6px;
-            overflow: hidden;
-            margin: 8px 0;
-        }
-
-        .progress-bar {
-            height: 100%;
-            background: linear-gradient(135deg, var(--accent-green) 0%, var(--accent-blue) 100%);
-            transition: width 0.3s ease;
-        }
-
-        @media (max-width: 768px) {
-            .grid-2, .grid-3, .grid-4 {
-                grid-template-columns: 1fr;
-            }
-            
-            .chart-container {
-                height: 250px;
-            }
-            
-            .stats-overview {
-                grid-template-columns: repeat(2, 1fr);
+function initializeAnalysisCharts() {
+    // Lap Times Chart
+    const ctx1 = document.getElementById('lapTimesChart').getContext('2d');
+    lapTimesChart = new Chart(ctx1, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: []
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    labels: { color: '#fff' }
+                }
+            },
+            scales: {
+                x: { 
+                    ticks: { color: '#fff' },
+                    grid: { color: '#444' }
+                },
+                y: { 
+                    ticks: { color: '#fff' },
+                    grid: { color: '#444' }
+                }
             }
         }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>📊 SmartRace Data Analysis</h1>
-        
-        <nav class="navigation">
-            <a href="/" class="nav-link">🏁 Live Dashboard</a>
-            <a href="/analysis" class="nav-link active">📊 Analyse</a>
-        </nav>
+    });
 
-        <!-- Overview Statistics -->
-        
+    // Driver Comparison Chart
+    const ctx2 = document.getElementById('driverComparisonChart').getContext('2d');
+    driverComparisonChart = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Beste Rundenzeit (ms)',
+                data: [],
+                backgroundColor: ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dda0dd', '#98d8c8']
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    labels: { color: '#fff' }
+                }
+            },
+            scales: {
+                x: { 
+                    ticks: { color: '#fff' },
+                    grid: { color: '#444' }
+                },
+                y: { 
+                    ticks: { color: '#fff' },
+                    grid: { color: '#444' }
+                }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}
