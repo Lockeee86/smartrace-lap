@@ -1,162 +1,79 @@
-:root {
-    --bs-primary: #0d6efd;
-    --bs-success: #198754;
-    --bs-warning: #ffc107;
-    --bs-danger: #dc3545;
-    --bs-info: #0dcaf0;
-    --bs-dark: #212529;
+/* Existing styles... */
+
+/* Laptime Monitor Styles */
+#laptime-monitor {
+    max-height: 500px;
+    overflow-y: auto;
 }
 
-body {
-    background-color: #121212;
-    color: #ffffff;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+#laptime-monitor table {
+    font-size: 0.85rem;
 }
 
-/* Custom Card Styles */
-.card {
-    background-color: #1e1e1e !important;
-    border: 1px solid #333 !important;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-    transition: all 0.3s ease;
+#laptime-monitor th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    white-space: nowrap;
+    padding: 8px 4px;
 }
 
-.card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+#laptime-monitor td {
+    padding: 6px 4px;
+    white-space: nowrap;
+    font-family: 'Courier New', monospace;
 }
 
-/* Navigation */
-.navbar-brand {
+/* Laptime color coding */
+.laptime-best {
+    background-color: #d4edda;
+    color: #155724;
     font-weight: bold;
-    font-size: 1.5rem;
 }
 
-.nav-link {
-    font-weight: 500;
-    transition: color 0.3s ease;
+.laptime-current {
+    background-color: #fff3cd;
+    color: #856404;
 }
 
-.nav-link:hover {
-    color: var(--bs-primary) !important;
+.laptime-slow {
+    color: #dc3545;
 }
 
-/* Tables */
-.table-dark {
-    --bs-table-bg: #1e1e1e;
-    --bs-table-border-color: #333;
-}
-
-.table-dark th {
-    border-color: #444;
-    color: #fff;
-    font-weight: 600;
-}
-
-.table-dark td {
-    border-color: #333;
-}
-
-/* Position badges */
-.position-1 { background-color: #ffd700 !important; color: #000 !important; }
-.position-2 { background-color: #c0c0c0 !important; color: #000 !important; }
-.position-3 { background-color: #cd7f32 !important; color: #fff !important; }
-
-/* Track SVG styles */
-.track-container {
-    background: #1a1a1a;
-    border-radius: 10px;
-    padding: 20px;
-    border: 1px solid #333;
-}
-
-.track-path {
-    fill: none;
-    stroke: #ccc;
-    stroke-width: 8;
-    stroke-linecap: round;
-}
-
-.track-border {
-    fill: none;
-    stroke: #666;
-    stroke-width: 2;
-    stroke-dasharray: 5,5;
-}
-
-.start-finish {
-    stroke: #00ff00;
-    stroke-width: 4;
-}
-
-/* Chart containers */
-.chart-container {
-    position: relative;
-    height: 300px;
-    background: #1e1e1e;
-    border-radius: 8px;
-    padding: 15px;
-}
-
-/* Animation for lap time updates */
-.lap-time-update {
-    animation: highlightUpdate 2s ease-in-out;
-}
-
-@keyframes highlightUpdate {
-    0% { background-color: rgba(13, 202, 240, 0.3); }
-    100% { background-color: transparent; }
-}
-
-/* Status indicators */
-.status-online { color: #28a745; }
-.status-offline { color: #dc3545; }
-.status-warning { color: #ffc107; }
-
-/* Responsive adjustments */
+/* Mobile responsiveness for laptime monitor */
 @media (max-width: 768px) {
-    .card-body {
-        padding: 1rem;
+    #laptime-monitor {
+        font-size: 0.7rem;
     }
     
-    .fs-1 {
-        font-size: 2rem !important;
-    }
-    
-    .chart-container {
-        height: 250px;
+    #laptime-monitor th,
+    #laptime-monitor td {
+        padding: 4px 2px;
     }
 }
 
-/* Loading spinner */
-.loading {
-    display: inline-block;
-    width: 20px;
-    height: 20px;
-    border: 3px solid rgba(255,255,255,.3);
-    border-radius: 50%;
-    border-top-color: #fff;
-    animation: spin 1s ease-in-out infinite;
+/* Driver name column styling */
+#laptime-monitor .fw-bold {
+    min-width: 120px;
+    text-align: left !important;
 }
 
-@keyframes spin {
-    to { transform: rotate(360deg); }
+/* Scrollbar styling for laptime monitor */
+#laptime-monitor::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-    width: 8px;
+#laptime-monitor::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
 }
 
-::-webkit-scrollbar-track {
-    background: #1e1e1e;
+#laptime-monitor::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 10px;
 }
 
-::-webkit-scrollbar-thumb {
+#laptime-monitor::-webkit-scrollbar-thumb:hover {
     background: #555;
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: #777;
 }
