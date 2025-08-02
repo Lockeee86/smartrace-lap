@@ -498,12 +498,14 @@ def start_auto_backup():
     print(f"✅ Auto-backup started (interval: {interval}s)")
 
 if __name__ == '__main__':
-    # Start auto-backup if enabled
-    start_auto_backup()
-    
     print("🏁 SmartRace Dashboard with Dropbox Integration")
     print(f"📁 Dropbox: {'✅ Enabled' if DROPBOX_ENABLED else '❌ Disabled'}")
-    if DROPBOX_ENABLED and dbx:
+    if DROPBOX_ENABLED:
         print(f"📂 Dropbox folder: {DROPBOX_FOLDER}")
     
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    # Production-ready server start
+    socketio.run(app, 
+                host='0.0.0.0', 
+                port=5000, 
+                debug=False,  # Debug auf False für Production
+                allow_unsafe_werkzeug=True)  # Für Development erlauben
