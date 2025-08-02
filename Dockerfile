@@ -1,32 +1,35 @@
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    sqlite3 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
+# Copy requirements first for better caching
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application files
-COPY app.py .
-COPY database.py .
-COPY templates/ templates/
+# Create directory structure
+RUN mkdir -p static/css static/js templates
 
-# Create data directory for SQLite database
-RUN mkdir -p /app/data
+# Copy all files
+COPY . .
 
-# Expose port
+# Set permissions
+RUN chmod -R 755 static/
+
+# Debug: List all files
+RUN echo "=== Files in /app ===" && ls -la /app/
+RUN echo "=== Files in /app/static ===" && ls -la /app/static/
+RUN echo "=== Files in /app/static/css ===" && ls -la /app/static/css/ || echo "CSS dir not found"
+RUN echo "=== Files in /app/static/js ===" && ls -la /app/static/js/ || echo "JS dir not found"
+
 EXPOSE 5000
 
-# Set environment variables
-ENV FLASK_APP=app.py
-ENV FLASK_ENV=production
-ENV DATABASE_PATH=/app/data/smartrace.db
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s \
+  CMD curl -f http://localhost:5000/ || exit 1
 
-# Run the application
 CMD ["python", "app.py"]
