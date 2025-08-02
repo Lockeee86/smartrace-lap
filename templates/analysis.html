@@ -1,122 +1,18 @@
 {% extends "base.html" %}
 
-{% block title %}Analyse - SmartRace{% endblock %}
+{% block title %}Race Analysis{% endblock %}
 
 {% block content %}
-<div class="container-fluid py-3">
-    <!-- Statistics Cards -->
-    <div class="row mb-4">
-        <div class="col-lg-3 col-md-6 mb-3">
-            <div class="card bg-dark border-success">
-                <div class="card-body text-center">
-                    <i class="bi bi-award fs-1 text-success"></i>
-                    <h6 class="card-title mt-2">Best Lap Time</h6>
-                    <h4 class="text-success" id="bestLapTime">--:--.---</h4>
-                    <small class="text-muted" id="bestLapDriver">-</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-3 col-md-6 mb-3">
-            <div class="card bg-dark border-info">
-                <div class="card-body text-center">
-                    <i class="bi bi-graph-up fs-1 text-info"></i>
-                    <h6 class="card-title mt-2">Average Lap Time</h6>
-                    <h4 class="text-info" id="avgLapTime">--:--.---</h4>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-3 col-md-6 mb-3">
-            <div class="card bg-dark border-warning">
-                <div class="card-body text-center">
-                    <i class="bi bi-arrow-repeat fs-1 text-warning"></i>
-                    <h6 class="card-title mt-2">Total Rounds</h6>
-                    <h4 class="text-warning" id="totalRounds">0</h4>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-3 col-md-6 mb-3">
-            <div class="card bg-dark border-primary">
-                <div class="card-body text-center">
-                    <i class="bi bi-people fs-1 text-primary"></i>
-                    <h6 class="card-title mt-2">Active Drivers</h6>
-                    <h4 class="text-primary" id="activeDrivers">0</h4>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Charts Row -->
-    <div class="row mb-4">
-        <div class="col-lg-8 mb-4">
-            <div class="card bg-dark">
-                <div class="card-header bg-primary">
-                    <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Lap Times Progression</h5>
-                </div>
-                <div class="card-body">
-                    <div style="height: 400px;">
-                        <canvas id="lapTimesChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-4 mb-4">
-            <div class="card bg-dark">
-                <div class="card-header bg-success">
-                    <h5 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Driver Comparison</h5>
-                </div>
-                <div class="card-body">
-                    <div style="height: 400px;">
-                        <canvas id="driverComparisonChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Detailed Analysis -->
+<div class="container-fluid analysis-content">
     <div class="row">
         <div class="col-12">
-            <div class="card bg-dark">
-                <div class="card-header bg-info">
-                    <h5 class="mb-0"><i class="bi bi-table me-2"></i>Detailed Race Analysis</h5>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-dark table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Position</th>
-                                    <th>Driver</th>
-                                    <th>Laps</th>
-                                    <th>Best Lap</th>
-                                    <th>Last Lap</th>
-                                    <th>Avg Lap</th>
-                                    <th>Total Time</th>
-                                    <th>Gap</th>
-                                </tr>
-                            </thead>
-                            <tbody id="analysisTable">
-                                <tr>
-                                    <td colspan="8" class="text-center text-muted py-4">
-                                        <i class="bi bi-hourglass-split fs-2"></i>
-                                        <br>Keine Daten verfügbar
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+            <h1>📊 Race Analysis</h1>
+            <!-- Analysis content here -->
         </div>
     </div>
 </div>
+{% endblock %}
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    initializeCharts();
-    if (window.smartRace && window.smartRace.socket) {
-        window.smartRace.socket.on('race_update', updateAnalysis);
-    }
-});
-</script>
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/analysis.js') }}"></script>
 {% endblock %}
