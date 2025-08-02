@@ -133,6 +133,7 @@ def auto_backup_session():
         session_json = json.dumps({
             'race_data': race_data,
             'track_data': track_data,
+            'lap_history': lap_history,
             'car_database': car_database,
             'export_timestamp': datetime.datetime.now().isoformat()
         }, indent=2)
@@ -141,177 +142,168 @@ def auto_backup_session():
         
         if success:
             print(f"✅ Auto-backup: Session data uploaded")
-            
+    
     except Exception as e:
         print(f"❌ Auto-backup failed: {e}")
 
-# Modified CSV generation functions
 def generate_race_results_csv():
-    """Generate race results CSV with car information"""
+    """Generate CSV content for race results"""
     output = io.StringIO()
     writer = csv.writer(output)
     
-    # Headers with car information
-    headers = [
-        'Position', 'Driver Name', 'Car Name', 'Car Manufacturer', 
-        'Car Scale', 'Car Class', 'Car Color', 'Digital/Analog',
-        'Laps Completed', 'Best Lap Time', 'Last Lap Time', 
-        'Total Time', 'Gap', 'Status', 'Export Time'
-    ]
-    writer.writerow(headers)
+    # Header
+    writer.writerow([
+        'Position', 'Driver ID', 'Driver Name', 'Car Number', 
+        'Total Time', 'Best Lap', 'Total Laps', 'Gap', 'Status'
+    ])
     
-    # Sort drivers by position
+    # Sort drivers by position or best lap
     sorted_drivers = sorted(
-        race_data['drivers'].items(),
-        key=lambda x: int(x[1].get('position', 999))
+        race_data['drivers'].items(), 
+        key=lambda x: x[1].get('position', 999)
     )
     
-    export_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-    for driver_id, driver in sorted_drivers:
-        car_info = car_database.get(driver.get('car_id'), {})
-        
-        row = [
-            driver.get('position', '-'),
-            driver.get('name', f'Driver {driver_id}'),
-            car_info.get('name', 'Unknown Car'),
-            car_info.get('manufacturer', 'Unknown'),
-            car_info.get('scale', '-'),
-            get_car_class_from_smartrace(car_info),
-            car_info.get('color', '#666666'),
-            car_info.get('digital_analog', 'unknown'),
-            driver.get('laps_completed', 0),
-            driver.get('best_lap_time', '-'),
-            driver.get('last_lap_time', '-'),
-            driver.get('total_time', '-'),
-            driver.get('gap', '-'),
-            driver.get('status', 'Unknown'),
-            export_time
-        ]
-        writer.writerow(row)
+    for driver_id, driver_data in sorted_drivers:
+        writer.writerow([
+            driver_data.get('position', 'N/A'),
+            driver_id,
+            driver_data.get('name', 'Unknown'),
+            driver_data.get('car_number', 'N/A'),
+            driver_data.get('total_time', '00:00:00'),
+            driver_data.get('best_lap', '00:00:00'),
+            driver_data.get('total_laps', 0),
+            driver_data.get('gap', '0.000'),
+            driver_data.get('status', 'Running')
+        ])
     
     return output.getvalue()
 
 def generate_lap_history_csv():
-    """Generate lap history CSV with car information"""
+    """Generate CSV content for lap history"""
     output = io.StringIO()
     writer = csv.writer(output)
     
-    # Headers
-    headers = [
-        'Driver ID', 'Driver Name', 'Car Name', 'Car Manufacturer',
-        'Lap Number', 'Lap Time', 'Sector 1', 'Sector 2', 'Sector 3',
-        'Timestamp', 'Session'
-    ]
-    writer.writerow(headers)
+    # Header
+    writer.writerow([
+        'Driver ID', 'Lap Number', 'Lap Time', 'Sector 1', 
+        'Sector 2', 'Sector 3', 'Timestamp'
+    ])
     
-    session_name = race_data['session_info'].get('session_name', 'Unknown Session')
-    
+    # Write lap data
     for driver_id, laps in lap_history.items():
-        driver_info = race_data['drivers'].get(driver_id, {})
-        car_info = car_database.get(driver_info.get('car_id'), {})
-        
         for lap in laps:
-            row = [
+            writer.writerow([
                 driver_id,
-                driver_info.get('name', f'Driver {driver_id}'),
-                car_info.get('name', 'Unknown Car'),
-                car_info.get('manufacturer', 'Unknown'),
-                lap.get('lap_number', '-'),
-                lap.get('lap_time', '-'),
-                lap.get('sector_1', '-'),
-                lap.get('sector_2', '-'),
-                lap.get('sector_3', '-'),
-                lap.get('timestamp', datetime.datetime.now().isoformat()),
-                session_name
-            ]
-            writer.writerow(row)
+                lap.get('lap_number', 'N/A'),
+                lap.get('lap_time', '00:00:00'),
+                lap.get('sector_1', '00:00:00'),
+                lap.get('sector_2', '00:00:00'),
+                lap.get('sector_3', '00:00:00'),
+                lap.get('timestamp', '')
+            ])
     
     return output.getvalue()
 
-# Existing functions (register_car_from_smartrace, etc.) bleiben unverändert...
-def register_car_from_smartrace(car_data):
-    """Registriert ein Auto aus SmartRace car_data Format"""
-    car_id = str(car_data.get('id', 'unknown'))
-    
-    if car_id not in car_database:
-        default_colors = ['#FF8C00', '#DC143C', '#00D2BE', '#1E41FF', '#FFD700', '#0066CC', '#8B0000', '#32CD32', '#9932CC', '#FF69B4']
-        
-        color = car_data.get('color', '')
-        hex_color = default_colors[len(car_database) % len(default_colors)]
-        
-        if color and color.startswith('rgb('):
-            try:
-                rgb_values = color.replace('rgb(', '').replace(')', '').split(',')
-                r, g, b = [int(x.strip()) for x in rgb_values]
-                hex_color = f'#{r:02x}{g:02x}{b:02x}'
-            except:
-                pass
-        elif color.startswith('#'):
-            hex_color = color
-        
-        car_database[car_id] = {
-            'name': car_data.get('name', f'Car {car_id}'),
-            'color': hex_color,
-            'manufacturer': car_data.get('manufacturer', 'Unknown'),
-            'scale': car_data.get('scale', '1:32'),
-            'digital_analog': car_data.get('digital_analog', 'digital'),
-            'magnets': car_data.get('magnets', 'unknown'),
-            'tyres': car_data.get('tyres', 'unknown'),
-            'decoder_type': car_data.get('decoder_type', 'unknown'),
-            'logo': car_data.get('logo', ''),
-            'comment': car_data.get('comment', ''),
-            'smartrace_data': car_data
-        }
-        
-        print(f"✅ Registered SmartRace car: {car_database[car_id]['name']}")
-
-def get_car_class_from_smartrace(car_info):
-    """Extract car class from SmartRace data"""
-    name = car_info.get('name', '').lower()
-    manufacturer = car_info.get('manufacturer', '').lower()
-    
-    if 'formula' in name or 'f1' in name:
-        return 'Formula'
-    elif any(term in name for term in ['gt', 'gte', 'gtc']):
-        return 'GT'
-    elif 'rally' in name:
-        return 'Rally'
-    elif 'nascar' in name:
-        return 'NASCAR'
-    elif 'le mans' in name or 'lmp' in name:
-        return 'Endurance'
-    elif manufacturer in ['carrera', 'scalextric', 'ninco']:
-        return 'Slot Car'
-    else:
-        return 'Sports Car'
-
 # Routes
 @app.route('/')
-def dashboard():
-    return render_template('dashboard.html', 
-                         race_data=race_data, 
-                         track_data=track_data,
-                         dropbox_enabled=DROPBOX_ENABLED,
-                         dropbox_connected=dbx is not None)
+def index():
+    """Main dashboard page"""
+    try:
+        return render_template('index.html', 
+                             dropbox_enabled=DROPBOX_ENABLED,
+                             total_drivers=len(race_data['drivers']))
+    except Exception as e:
+        print(f"ERROR in index route: {e}")
+        return jsonify({"error": f"Homepage error: {e}"}), 500
 
-@app.route('/settings')
-def settings():
-    return render_template('settings.html',
-                         dropbox_enabled=DROPBOX_ENABLED,
-                         dropbox_connected=dbx is not None,
-                         dropbox_folder=DROPBOX_FOLDER)
+@app.route('/api/health')
+def health_check():
+    """Health check endpoint"""
+    try:
+        return jsonify({
+            "status": "healthy",
+            "timestamp": datetime.datetime.now().isoformat(),
+            "server": "SmartRace Dashboard",
+            "dropbox_enabled": DROPBOX_ENABLED,
+            "total_drivers": len(race_data['drivers'])
+        })
+    except Exception as e:
+        print(f"ERROR in health_check: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/race-data')
+def get_race_data():
+    """Get race data - KORRIGIERT"""
+    try:
+        return jsonify(race_data)
+    except Exception as e:
+        print(f"ERROR in get_race_data: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/track-data')
+def get_track_data():
+    """Get track data - KORRIGIERT"""
+    try:
+        return jsonify(track_data)
+    except Exception as e:
+        print(f"ERROR in get_track_data: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/lap-history')
+def get_lap_history():
+    """Get lap history - KORRIGIERT"""
+    try:
+        return jsonify(lap_history)
+    except Exception as e:
+        print(f"ERROR in get_lap_history: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/car-database')
+def get_car_database():
+    """Get car database - KORRIGIERT"""
+    try:
+        return jsonify(car_database)
+    except Exception as e:
+        print(f"ERROR in get_car_database: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/track-info')
+def track_info():
+    """Get track information - KORRIGIERT"""
+    try:
+        return jsonify({
+            'track_name': 'Nürburgring GP',
+            'length': 5148,
+            'sectors': 3,
+            'layout': 'road_course'
+        })
+    except Exception as e:
+        print(f"ERROR in track_info: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/analysis-data')
+def analysis_data():
+    """Get analysis data - KORRIGIERT"""
+    try:
+        return jsonify({
+            'sessions': [],
+            'statistics': {},
+            'charts': []
+        })
+    except Exception as e:
+        print(f"ERROR in analysis_data: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/dropbox/status')
 def dropbox_status():
-    """Get Dropbox connection status"""
-    if not DROPBOX_ENABLED:
-        return jsonify({'enabled': False, 'connected': False, 'message': 'Dropbox integration disabled'})
-    
-    if not dbx:
-        return jsonify({'enabled': True, 'connected': False, 'message': 'Dropbox not connected'})
-    
+    """Get Dropbox connection status - KORRIGIERT"""
     try:
+        if not DROPBOX_ENABLED:
+            return jsonify({'enabled': False, 'connected': False, 'message': 'Dropbox integration disabled'})
+        
+        if not dbx:
+            return jsonify({'enabled': True, 'connected': False, 'message': 'Dropbox not connected'})
+        
         account = dbx.users_get_current_account()
         return jsonify({
             'enabled': True,
@@ -322,111 +314,48 @@ def dropbox_status():
             'message': 'Connected successfully'
         })
     except Exception as e:
-        return jsonify({'enabled': True, 'connected': False, 'message': f'Connection error: {e}'})
+        print(f"ERROR in dropbox_status: {e}")
+        return jsonify({'enabled': True, 'connected': False, 'message': f'Connection error: {e}'}), 500
 
-@app.route('/api/export/dropbox')
-def export_to_dropbox():
-    """Export current session to Dropbox"""
-    if not DROPBOX_ENABLED or not dbx:
-        return jsonify({'success': False, 'message': 'Dropbox not available'})
-    
+@app.route('/api/dropbox/upload', methods=['POST'])
+def manual_upload():
+    """Manual upload to Dropbox"""
     try:
-        folder_name = get_session_folder_name()
-        results = []
+        if not DROPBOX_ENABLED or not dbx:
+            return jsonify({'success': False, 'message': 'Dropbox not available'}), 400
         
-        # Export race results
+        folder_name = get_session_folder_name()
+        
+        # Upload race results
         csv_content = generate_race_results_csv()
         success, msg = upload_to_dropbox(csv_content, "race_results.csv", folder_name)
-        results.append({'file': 'race_results.csv', 'success': success, 'message': msg})
         
-        # Export lap history
+        if not success:
+            return jsonify({'success': False, 'message': msg}), 500
+        
+        # Upload lap history
         lap_csv_content = generate_lap_history_csv()
         success, msg = upload_to_dropbox(lap_csv_content, "lap_history.csv", folder_name)
-        results.append({'file': 'lap_history.csv', 'success': success, 'message': msg})
         
-        # Export session data
-        session_json = json.dumps({
-            'race_data': race_data,
-            'track_data': track_data,
-            'car_database': car_database,
-            'export_timestamp': datetime.datetime.now().isoformat()
-        }, indent=2)
-        
-        success, msg = upload_to_dropbox(session_json, "session_data.json", folder_name)
-        results.append({'file': 'session_data.json', 'success': success, 'message': msg})
-        
-        successful_uploads = sum(1 for r in results if r['success'])
+        if not success:
+            return jsonify({'success': False, 'message': msg}), 500
         
         return jsonify({
-            'success': successful_uploads > 0,
-            'message': f'Successfully uploaded {successful_uploads}/{len(results)} files to Dropbox/{folder_name}',
-            'results': results,
-            'folder': f"{DROPBOX_FOLDER}/{folder_name}"
+            'success': True, 
+            'message': f'Files uploaded to {folder_name}',
+            'folder': folder_name
         })
         
     except Exception as e:
-        return jsonify({'success': False, 'message': f'Export failed: {e}'})
+        print(f"ERROR in manual_upload: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
-# Existing routes remain the same...
-@app.route('/api/race-data')
-def get_race_data():
-    return jsonify(race_data)
-
-@app.route('/api/track-data')
-def get_track_data():
-    return jsonify(track_data)
-
-@app.route('/api/lap-history')
-def get_lap_history():
-    return jsonify(lap_history)
-
-@app.route('/api/car-database')
-def get_car_database():
-    return jsonify(car_database)
-
-# Track management route
-@app.route('/track')
-def track():
-    """Track management page"""
-    return render_template('track.html')
-
-@app.route('/api/track-info')
-def track_info():
-    """Get track information"""
-    return jsonify({
-        'track_name': 'Nürburgring GP',
-        'length': 5148,
-        'sectors': 3,
-        'layout': 'road_course'
-    })
-
-# Analysis route  
-@app.route('/analysis')
-def analysis():
-    """Analysis page"""
-    return render_template('analysis.html')
-
-@app.route('/api/analysis-data')
-def analysis_data():
-    """Get analysis data"""
-    return jsonify({
-        'sessions': [],
-        'statistics': {},
-        'charts': []
-    })
-
-
-@app.route('/smartrace', methods=['POST'])
-def handle_smartrace_data():
+@app.route('/api/smartrace', methods=['POST'])
+def receive_smartrace_data():
+    """Receive data from SmartRace"""
     try:
         data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No JSON data received'}), 400
-        
-        # Register car if present
-        if 'car_data' in data:
-            register_car_from_smartrace(data['car_data'])
-            socketio.emit('car_database_update', car_database)
+        print(f"📥 Received SmartRace data: {json.dumps(data, indent=2)}")
         
         # Handle driver data
         if 'driver_data' in data:
@@ -435,11 +364,11 @@ def handle_smartrace_data():
             
             race_data['drivers'][driver_id] = {
                 'name': driver_data.get('name', f'Driver {driver_id}'),
-                'car_id': str(data.get('car_data', {}).get('id', 'unknown')),
+                'car_number': driver_data.get('car_number'),
                 'position': driver_data.get('position'),
-                'laps_completed': driver_data.get('laps', 0),
-                'best_lap_time': driver_data.get('best_time'),
-                'last_lap_time': driver_data.get('last_time'),
+                'best_lap': driver_data.get('best_lap'),
+                'last_lap': driver_data.get('last_lap'),
+                'total_laps': driver_data.get('total_laps'),
                 'total_time': driver_data.get('total_time'),
                 'gap': driver_data.get('gap'),
                 'status': driver_data.get('status', 'Running')
@@ -493,23 +422,45 @@ def handle_smartrace_data():
 
 @app.route('/export/csv/race-results')
 def export_race_results():
-    csv_data = generate_race_results_csv()
-    
-    response = make_response(csv_data)
-    response.headers["Content-Disposition"] = f"attachment; filename=smartrace_results_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    response.headers["Content-Type"] = "text/csv"
-    
-    return response
+    """Export race results as CSV"""
+    try:
+        csv_data = generate_race_results_csv()
+        
+        response = make_response(csv_data)
+        response.headers["Content-Disposition"] = f"attachment; filename=smartrace_results_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        response.headers["Content-Type"] = "text/csv"
+        
+        return response
+    except Exception as e:
+        print(f"ERROR in export_race_results: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/export/csv/lap-history')
 def export_lap_history():
-    csv_data = generate_lap_history_csv()
-    
-    response = make_response(csv_data)
-    response.headers["Content-Disposition"] = f"attachment; filename=smartrace_laphistory_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    response.headers["Content-Type"] = "text/csv"
-    
-    return response
+    """Export lap history as CSV"""
+    try:
+        csv_data = generate_lap_history_csv()
+        
+        response = make_response(csv_data)
+        response.headers["Content-Disposition"] = f"attachment; filename=smartrace_laphistory_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        response.headers["Content-Type"] = "text/csv"
+        
+        return response
+    except Exception as e:
+        print(f"ERROR in export_lap_history: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# SocketIO Events
+@socketio.on('connect')
+def handle_connect():
+    """Handle client connection"""
+    print("🔌 Client connected")
+    emit('race_update', race_data)
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handle client disconnection"""
+    print("🔌 Client disconnected")
 
 # Auto-backup thread
 def start_auto_backup():
@@ -529,15 +480,22 @@ def start_auto_backup():
     backup_thread.start()
     print(f"✅ Auto-backup started (interval: {interval}s)")
 
+# Main
 if __name__ == '__main__':
     print("🏁 SmartRace Dashboard with Dropbox Integration")
     print(f"📁 Dropbox: {'✅ Enabled' if DROPBOX_ENABLED else '❌ Disabled'}")
     if DROPBOX_ENABLED:
         print(f"📂 Dropbox folder: {DROPBOX_FOLDER}")
+        # Start auto-backup thread
+        start_auto_backup()
     
     # Production-ready server start
-    socketio.run(app, 
-                host='0.0.0.0', 
-                port=5000, 
-                debug=False,  # Debug auf False für Production
-                allow_unsafe_werkzeug=True)  # Für Development erlauben
+    try:
+        socketio.run(app, 
+                    host='0.0.0.0', 
+                    port=5000, 
+                    debug=False,  # Debug auf False für Production
+                    use_reloader=False,  # Verhindert doppelte Starts
+                    allow_unsafe_werkzeug=True)  # Für Development erlauben
+    except Exception as e:
+        print(f"❌ Server start failed: {e}")
