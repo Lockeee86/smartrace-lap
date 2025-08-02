@@ -1,4 +1,7 @@
 Flask==2.3.3
-flask-socketio==5.3.6
+Flask-SocketIO==5.3.6
 python-socketio==5.8.0
-Werkzeug==2.3.7
+python-engineio==4.7.1
+eventlet==0.33.3
+dropbox==11.36.2
+python-dotenv==1.0.0
