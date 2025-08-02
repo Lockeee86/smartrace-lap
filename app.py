@@ -1,111 +1,85 @@
-from flask import Flask, request, jsonify, render_template
-from database import RaceDatabase
+from flask import Flask, render_template, jsonify, request
+from flask_socketio import SocketIO, emit
 import json
+import time
 from datetime import datetime
 
 app = Flask(__name__)
-db = RaceDatabase()
+app.config['SECRET_KEY'] = 'your-secret-key'
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+# Globale Variablen
+race_data = {}
+track_data = {}
+connected_clients = 0
 
 @app.route('/')
 def dashboard():
     return render_template('dashboard.html')
 
-@app.route('/analysis')
-def analysis():
-    return render_template('analysis.html')
-
 @app.route('/webhook', methods=['POST'])
-def webhook():
+def receive_race_data():
+    global race_data
     try:
         data = request.json
-        if not data:
-            return jsonify({'error': 'Keine Daten erhalten'}), 400
+        race_data = data
+        race_data['timestamp'] = datetime.now().isoformat()
         
-        if data.get('event_type') == 'ui.lap_update':
-            db.insert_lap_update(data)
-            return jsonify({'status': 'success'}), 200
+        # An alle Clients senden
+        socketio.emit('race_update', race_data)
         
-        return jsonify({'status': 'ignored', 'reason': 'Event type not supported'}), 200
-    
+        print(f"Race data received: {json.dumps(data, indent=2)}")
+        return jsonify({"status": "success"})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error processing race data: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+@app.route('/webhook/track', methods=['POST'])
+def receive_track_data():
+    global track_data
+    try:
+        data = request.json
+        track_data = data
+        track_data['timestamp'] = datetime.now().isoformat()
+        
+        # An alle Clients senden
+        socketio.emit('track_update', track_data)
+        
+        print(f"Track data received: {json.dumps(data, indent=2)}")
+        return jsonify({"status": "success"})
+    except Exception as e:
+        print(f"Error processing track data: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 400
 
 @app.route('/api/live-data')
-def live_data():
-    try:
-        stats = db.get_driver_stats()
-        recent = db.get_recent_laps(20)
-        db_info = db.get_database_info()
-        
-        last_update = "Keine Daten"
-        if recent:
-            last_update = recent[0]['datetime']
-        
-        return jsonify({
-            'driver_stats': stats,
-            'recent_laps': recent,
-            'database_info': db_info,
-            'last_update': last_update
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+def get_live_data():
+    return jsonify({
+        'race_data': race_data,
+        'track_data': track_data,
+        'connected_clients': connected_clients
+    })
 
-# Neue Analyse-Endpoints
-@app.route('/api/analysis/overview')
-def analysis_overview():
-    try:
-        data = db.get_analysis_overview()
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+@socketio.on('connect')
+def handle_connect():
+    global connected_clients
+    connected_clients += 1
+    emit('connected', {'data': 'Connected to SmartRace Dashboard'})
+    
+    # Aktuelle Daten senden
+    if race_data:
+        emit('race_update', race_data)
+    if track_data:
+        emit('track_update', track_data)
 
-@app.route('/api/analysis/driver/<int:driver_id>')
-def driver_analysis(driver_id):
-    try:
-        data = db.get_driver_analysis(driver_id)
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/analysis/session-comparison')
-def session_comparison():
-    try:
-        data = db.get_session_comparison()
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/analysis/sector-performance')
-def sector_performance():
-    try:
-        data = db.get_sector_performance()
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/analysis/consistency')
-def consistency_analysis():
-    try:
-        data = db.get_consistency_analysis()
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/analysis/car-performance')
-def car_performance():
-    try:
-        data = db.get_car_performance_analysis()
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/analysis/lap-progression/<int:driver_id>')
-def lap_progression(driver_id):
-    try:
-        data = db.get_lap_progression(driver_id)
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+@socketio.on('disconnect')
+def handle_disconnect():
+    global connected_clients
+    connected_clients = max(0, connected_clients - 1)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    print("🏁 SmartRace Dashboard starting...")
+    print("📡 Webhooks available:")
+    print("   Race Data: /webhook")
+    print("   Track Data: /webhook/track")
+    print("🌐 Dashboard: http://localhost:5000")
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
