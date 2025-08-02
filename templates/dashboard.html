@@ -3,75 +3,116 @@
 {% block title %}SmartRace Dashboard{% endblock %}
 
 {% block content %}
-<!-- Session Status Card -->
+<!-- Session Info Row -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <i class="fas fa-flag-checkered me-2"></i>Session
+                </h6>
+                <h4>{{ race_data.session_info.session_type }}</h4>
+                <small>{{ race_data.session_info.session_status }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <i class="fas fa-clock me-2"></i>Session Time
+                </h6>
+                <h4 id="session-time">{{ race_data.session_info.total_time }}</h4>
+                <small>Total Duration</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <i class="fas fa-trophy me-2"></i>Current Lap
+                </h6>
+                <h4 id="current-lap">{{ race_data.session_info.current_lap }}</h4>
+                <small>of {{ race_data.session_info.total_laps }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <i class="fas fa-flag me-2"></i>Flag Status
+                </h6>
+                <h4 id="flag-status">{{ race_data.session_info.flag_status }}</h4>
+                <small>Track Condition</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Laptime Monitor - NEUE SEKTION -->
 <div class="row mb-4">
     <div class="col-12">
         <div class="card">
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-md-8">
-                        <h5 class="card-title mb-0">
-                            <i class="fas fa-flag-checkered me-2"></i>Session Status
-                        </h5>
-                    </div>
-                    <div class="col-md-4 text-end">
-                        <div class="dropdown">
-                            <button class="btn btn-outline-light dropdown-toggle" type="button" id="exportDropdown" data-bs-dropdown="dropdown" aria-expanded="false">
-                                <i class="fas fa-download me-2"></i>Export Data
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="exportDropdown">
-                                <li><a class="dropdown-item" href="/export/race-data" target="_blank">
-                                    <i class="fas fa-racing-flag me-2"></i>Race Data CSV
-                                </a></li>
-                                <li><a class="dropdown-item" href="/export/lap-history" target="_blank">
-                                    <i class="fas fa-stopwatch me-2"></i>Lap History CSV
-                                </a></li>
-                                <li><a class="dropdown-item" href="/export/session-summary" target="_blank">
-                                    <i class="fas fa-chart-bar me-2"></i>Session Summary CSV
-                                </a></li>
-                            </ul>
-                        </div>
-                    </div>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-stopwatch me-2"></i>Laptime Monitor - Last 10 Laps
+                </h5>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-primary active" onclick="showAllDrivers()">All</button>
+                    <button type="button" class="btn btn-outline-primary" onclick="showTop6Drivers()">Top 6</button>
                 </div>
-                
-                <div class="row mt-3">
-                    <div class="col-md-3">
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-trophy text-warning me-2"></i>
-                            <div>
-                                <small class="text-muted">Session Type</small><br>
-                                <strong id="session-type">{{ race_data.session_info.session_type }}</strong>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-clock text-info me-2"></i>
-                            <div>
-                                <small class="text-muted">Total Time</small><br>
-                                <strong id="total-time">{{ race_data.session_info.total_time }}</strong>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-list-ol text-success me-2"></i>
-                            <div>
-                                <small class="text-muted">Current Lap</small><br>
-                                <strong id="current-lap">{{ race_data.session_info.current_lap }}</strong> / <span id="total-laps">{{ race_data.session_info.total_laps }}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-flag text-primary me-2"></i>
-                            <div>
-                                <small class="text-muted">Flag Status</small><br>
-                                <span id="flag-status" class="badge bg-success">{{ race_data.session_info.flag_status }}</span>
-                            </div>
-                        </div>
-                    </div>
+            </div>
+            <div class="card-body p-0">
+                <div id="laptime-monitor" class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th style="width: 120px;">Driver</th>
+                                <th class="text-center">L-9</th>
+                                <th class="text-center">L-8</th>
+                                <th class="text-center">L-7</th>
+                                <th class="text-center">L-6</th>
+                                <th class="text-center">L-5</th>
+                                <th class="text-center">L-4</th>
+                                <th class="text-center">L-3</th>
+                                <th class="text-center">L-2</th>
+                                <th class="text-center">L-1</th>
+                                <th class="text-center bg-warning">Current</th>
+                                <th class="text-center">Best</th>
+                                <th class="text-center">Avg</th>
+                            </tr>
+                        </thead>
+                        <tbody id="laptime-rows">
+                            <!-- Wird via JavaScript befüllt -->
+                        </tbody>
+                    </table>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Export Buttons Row -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="d-flex justify-content-end">
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-success btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+                    <i class="fas fa-download me-1"></i>Export Data
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="/export/race-data">
+                        <i class="fas fa-table me-2"></i>Race Data CSV
+                    </a></li>
+                    <li><a class="dropdown-item" href="/export/lap-history">
+                        <i class="fas fa-history me-2"></i>Lap History CSV
+                    </a></li>
+                    <li><a class="dropdown-item" href="/export/session-summary">
+                        <i class="fas fa-chart-line me-2"></i>Session Summary CSV
+                    </a></li>
+                </ul>
             </div>
         </div>
     </div>
@@ -82,30 +123,32 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <h5 class="card-title mb-0">
+                <h5 class="mb-0">
                     <i class="fas fa-users me-2"></i>Driver Standings
                 </h5>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-dark table-hover">
-                        <thead>
+                    <table class="table table-striped table-hover mb-0">
+                        <thead class="table-dark">
                             <tr>
                                 <th>Pos</th>
                                 <th>Driver</th>
                                 <th>Laps</th>
-                                <th>Best Lap</th>
-                                <th>Last Lap</th>
+                                <th>Best Time</th>
+                                <th>Last Time</th>
                                 <th>Gap</th>
                                 <th>Status</th>
                             </tr>
                         </thead>
-                        <tbody id="drivers-table">
+                        <tbody>
                             {% for driver_id, driver in race_data.drivers.items() %}
-                            <tr>
+                            <tr id="driver-row-{{ driver_id }}">
                                 <td>
-                                    {% if driver.position <= 3 %}
-                                        <span class="badge position-{{ driver.position }}">{{ driver.position }}</span>
+                                    {% if driver.position == 1 %}
+                                        <span class="badge bg-warning text-dark">{{ driver.position }}</span>
+                                    {% elif driver.position <= 3 %}
+                                        <span class="badge bg-success">{{ driver.position }}</span>
                                     {% else %}
                                         <span class="badge bg-primary">{{ driver.position }}</span>
                                     {% endif %}
