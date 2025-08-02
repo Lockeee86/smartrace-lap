@@ -384,6 +384,38 @@ def get_lap_history():
 def get_car_database():
     return jsonify(car_database)
 
+# Track management route
+@app.route('/track')
+def track():
+    """Track management page"""
+    return render_template('track.html')
+
+@app.route('/api/track-info')
+def track_info():
+    """Get track information"""
+    return jsonify({
+        'track_name': 'Nürburgring GP',
+        'length': 5148,
+        'sectors': 3,
+        'layout': 'road_course'
+    })
+
+# Analysis route  
+@app.route('/analysis')
+def analysis():
+    """Analysis page"""
+    return render_template('analysis.html')
+
+@app.route('/api/analysis-data')
+def analysis_data():
+    """Get analysis data"""
+    return jsonify({
+        'sessions': [],
+        'statistics': {},
+        'charts': []
+    })
+
+
 @app.route('/smartrace', methods=['POST'])
 def handle_smartrace_data():
     try:
