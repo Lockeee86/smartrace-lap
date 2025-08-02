@@ -1,1 +1,163 @@
+:root {
+    --bs-dark: #212529;
+    --bs-secondary: #6c757d;
+    --racing-red: #dc3545;
+    --racing-green: #198754;
+    --racing-blue: #0d6efd;
+    --racing-yellow: #ffc107;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.navbar-brand {
+    font-size: 1.5rem;
+}
+
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.3);
+    transition: transform 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+
+/* Leaderboard Styles */
+.leaderboard-item {
+    transition: all 0.3s ease;
+    border-left: 4px solid transparent;
+}
+
+.leaderboard-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.leaderboard-item.position-1 {
+    border-left-color: #ffd700;
+    background: linear-gradient(90deg, rgba(255, 215, 0, 0.1) 0%, transparent 100%);
+}
+
+.leaderboard-item.position-2 {
+    border-left-color: #c0c0c0;
+    background: linear-gradient(90deg, rgba(192, 192, 192, 0.1) 0%, transparent 100%);
+}
+
+.leaderboard-item.position-3 {
+    border-left-color: #cd7f32;
+    background: linear-gradient(90deg, rgba(205, 127, 50, 0.1) 0%, transparent 100%);
+}
+
+/* Lap Time Cards */
+.lap-time-card {
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.lap-time-card:hover {
+    border-color: var(--bs-primary);
+    transform: scale(1.02);
+}
+
+.lap-time-best {
+    border-color: var(--racing-green) !important;
+    background: linear-gradient(135deg, rgba(25, 135, 84, 0.1) 0%, transparent 100%);
+}
+
+.lap-time-personal {
+    border-color: var(--racing-blue) !important;
+    background: linear-gradient(135deg, rgba(13, 110, 253, 0.1) 0%, transparent 100%);
+}
+
+.lap-time-slow {
+    border-color: var(--racing-red) !important;
+    background: linear-gradient(135deg, rgba(220, 53, 69, 0.1) 0%, transparent 100%);
+}
+
+/* Track SVG */
+#trackSvg, #trackDetailSvg {
+    background: #1a1a1a;
+}
+
+.track-path {
+    fill: none;
+    stroke: #ffffff;
+    stroke-width: 8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.track-border {
+    fill: none;
+    stroke: #dc3545;
+    stroke-width: 2;
+    stroke-dasharray: 5,5;
+}
+
+.start-finish {
+    fill: none;
+    stroke: #198754;
+    stroke-width: 6;
+}
+
+.sector-line {
+    fill: none;
+    stroke: #ffc107;
+    stroke-width: 2;
+    stroke-dasharray: 3,3;
+}
+
+/* Connection Status */
+#connectionStatus.connected {
+    color: #198754 !important;
+}
+
+#connectionStatus.disconnected {
+    color: #dc3545 !important;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .navbar-brand {
+        font-size: 1.2rem;
+    }
+    
+    #trackSvg {
+        height: 250px;
+    }
+    
+    #trackDetailSvg {
+        height: 400px;
+    }
+}
+
+/* Loading Animation */
+.loading {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bs-dark);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--bs-secondary);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--bs-primary);
+}
 
