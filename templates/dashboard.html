@@ -1,534 +1,112 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SmartRace Dashboard</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+{% extends "base.html" %}
 
-        body {
-            font-family: 'Orbitron', monospace;
-            background: linear-gradient(135deg, #000428 0%, #004e92 100%);
-            color: white;
-            min-height: 100vh;
-            overflow-x: auto;
-        }
-
-        /* Header mit Track Info */
-        .header {
-            background: rgba(0, 0, 0, 0.8);
-            padding: 1rem;
-            border-bottom: 3px solid #00ff88;
-            backdrop-filter: blur(10px);
-        }
-
-        .track-info {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-
-        .track-name {
-            font-size: 2rem;
-            font-weight: 900;
-            color: #00ff88;
-            text-shadow: 0 0 20px #00ff88;
-        }
-
-        .track-details {
-            display: flex;
-            gap: 2rem;
-            flex-wrap: wrap;
-            font-size: 0.9rem;
-        }
-
-        .track-stat {
-            text-align: center;
-            padding: 0.5rem 1rem;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
-            border: 1px solid rgba(0, 255, 136, 0.3);
-        }
-
-        .track-stat-label {
-            display: block;
-            font-size: 0.7rem;
-            opacity: 0.8;
-            margin-bottom: 0.2rem;
-        }
-
-        .track-stat-value {
-            font-weight: bold;
-            color: #00ff88;
-        }
-
-        /* Dashboard Grid */
-        .dashboard {
-            padding: 2rem;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        /* Race Status Panel */
-        .race-status {
-            background: rgba(0, 0, 0, 0.6);
-            border: 2px solid #00ff88;
-            border-radius: 15px;
-            padding: 1.5rem;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 8px 25px rgba(0, 255, 136, 0.2);
-        }
-
-        .status-title {
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-            text-align: center;
-            color: #00ff88;
-            text-shadow: 0 0 10px #00ff88;
-        }
-
-        .status-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-
-        .status-item {
-            text-align: center;
-            padding: 0.8rem;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 10px;
-            border: 1px solid rgba(0, 255, 136, 0.2);
-        }
-
-        .status-label {
-            font-size: 0.8rem;
-            opacity: 0.8;
-            margin-bottom: 0.5rem;
-        }
-
-        .status-value {
-            font-size: 1.2rem;
-            font-weight: bold;
-            color: #00ff88;
-        }
-
-        /* Leaderboard */
-        .leaderboard {
-            background: rgba(0, 0, 0, 0.6);
-            border: 2px solid #ff6b35;
-            border-radius: 15px;
-            padding: 1.5rem;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 8px 25px rgba(255, 107, 53, 0.2);
-        }
-
-        .leaderboard-title {
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-            text-align: center;
-            color: #ff6b35;
-            text-shadow: 0 0 10px #ff6b35;
-        }
-
-        .driver-row {
-            display: grid;
-            grid-template-columns: 40px 1fr 80px 100px;
-            gap: 1rem;
-            padding: 1rem;
-            margin-bottom: 0.5rem;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 10px;
-            border-left: 4px solid #ff6b35;
-            align-items: center;
-            transition: all 0.3s ease;
-        }
-
-        .driver-row:hover {
-            background: rgba(255, 255, 255, 0.1);
-            transform: translateY(-2px);
-        }
-
-        .driver-row.position-1 { border-left-color: #ffd700; }
-        .driver-row.position-2 { border-left-color: #c0c0c0; }
-        .driver-row.position-3 { border-left-color: #cd7f32; }
-
-        .position {
-            font-size: 1.5rem;
-            font-weight: bold;
-            text-align: center;
-            color: #ffd700;
-        }
-
-        .driver-name {
-            font-weight: bold;
-        }
-
-        .laps {
-            text-align: center;
-            color: #00ff88;
-        }
-
-        .lap-time {
-            text-align: center;
-            font-family: 'Courier New', monospace;
-            color: #ff6b35;
-        }
-
-        .lap-time.best-lap {
-            color: #ffd700;
-            text-shadow: 0 0 10px #ffd700;
-        }
-
-        .lap-time.reference-beat {
-            color: #00ff88;
-            animation: pulse 1s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-
-        /* Connection Status */
-        .connection-status {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            backdrop-filter: blur(10px);
-        }
-
-        .connection-status.connected {
-            background: rgba(0, 255, 136, 0.2);
-            border: 1px solid #00ff88;
-            color: #00ff88;
-        }
-
-        .connection-status.disconnected {
-            background: rgba(255, 107, 53, 0.2);
-            border: 1px solid #ff6b35;
-            color: #ff6b35;
-        }
-
-        /* No Data Message */
-        .no-data {
-            text-align: center;
-            padding: 2rem;
-            opacity: 0.6;
-            font-style: italic;
-        }
-
-        /* Responsive Design */
-        @media (max-width: 768px) {
-            .track-info {
-                flex-direction: column;
-                text-align: center;
-            }
-            
-            .track-details {
-                justify-content: center;
-            }
-            
-            .dashboard {
-                grid-template-columns: 1fr;
-                padding: 1rem;
-            }
-            
-            .driver-row {
-                grid-template-columns: 30px 1fr 60px 80px;
-                gap: 0.5rem;
-                padding: 0.8rem;
-            }
-            
-            .track-name {
-                font-size: 1.5rem;
-            }
-        }
-    </style>
-</head>
-<body>
-    <!-- Header mit Track Information -->
-    <div class="header">
-        <div class="track-info" id="trackInfo">
-            <div class="track-name" id="trackName">SmartRace Dashboard</div>
-            <div class="track-details" id="trackDetails">
-                <!-- Track details werden hier eingefügt -->
+{% block content %}
+<div class="row g-4">
+    <!-- Live Racing Info -->
+    <div class="col-12">
+        <div class="card bg-secondary">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-broadcast-pin text-danger me-2"></i>Live Race Status
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <div class="p-3 bg-dark rounded text-center">
+                            <div class="h4 text-success mb-1" id="raceTime">--:--:--.---</div>
+                            <small class="text-muted">Race Time</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-3 bg-dark rounded text-center">
+                            <div class="h4 text-info mb-1" id="totalLaps">---</div>
+                            <small class="text-muted">Total Laps</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-3 bg-dark rounded text-center">
+                            <div class="h4 text-warning mb-1" id="raceMode">---</div>
+                            <small class="text-muted">Race Mode</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-3 bg-dark rounded text-center">
+                            <div class="h4 text-primary mb-1" id="trackName">---</div>
+                            <small class="text-muted">Track</small>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Connection Status -->
-    <div class="connection-status disconnected" id="connectionStatus">
-        🔴 Disconnected
-    </div>
-
-    <!-- Dashboard Content -->
-    <div class="dashboard">
-        <!-- Race Status Panel -->
-        <div class="race-status">
-            <div class="status-title">🏁 Race Status</div>
-            <div class="status-grid" id="raceStatusGrid">
-                <div class="status-item">
-                    <div class="status-label">Active Drivers</div>
-                    <div class="status-value" id="activeDrivers">-</div>
-                </div>
-                <div class="status-item">
-                    <div class="status-label">Total Laps</div>
-                    <div class="status-value" id="totalLaps">-</div>
-                </div>
-                <div class="status-item">
-                    <div class="status-label">Race Time</div>
-                    <div class="status-value" id="raceTime">-</div>
-                </div>
-                <div class="status-item">
-                    <div class="status-label">Best Lap</div>
-                    <div class="status-value" id="bestLap">-</div>
-                </div>
+    <!-- Track Layout & Leaderboard -->
+    <div class="col-xl-8">
+        <div class="card bg-secondary h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-map me-2"></i>Track Layout
+                </h5>
             </div>
-        </div>
-
-        <!-- Leaderboard -->
-        <div class="leaderboard">
-            <div class="leaderboard-title">🏆 Live Ranking</div>
-            <div id="leaderboardContent">
-                <div class="no-data">Waiting for race data...</div>
+            <div class="card-body">
+                <div id="trackContainer" class="text-center">
+                    <svg id="trackSvg" width="100%" height="400" viewBox="0 0 800 400" class="border border-secondary rounded">
+                        <!-- Track wird hier dynamisch eingefügt -->
+                        <text x="400" y="200" text-anchor="middle" fill="#6c757d" font-size="18">
+                            Warten auf Track-Daten...
+                        </text>
+                    </svg>
+                </div>
             </div>
         </div>
     </div>
 
-    <script>
-        // Socket.IO Connection
-        const socket = io();
-        let trackData = {};
-        let raceData = {};
-
-        // Connection Status
-        const statusElement = document.getElementById('connectionStatus');
-        
-        socket.on('connect', () => {
-            statusElement.textContent = '🟢 Connected';
-            statusElement.className = 'connection-status connected';
-        });
-
-        socket.on('disconnect', () => {
-            statusElement.textContent = '🔴 Disconnected';
-            statusElement.className = 'connection-status disconnected';
-        });
-
-        // Track Data Update
-        socket.on('track_update', (data) => {
-            trackData = data;
-            updateTrackInfo();
-        });
-
-        // Race Data Update
-        socket.on('race_update', (data) => {
-            raceData = data;
-            updateDashboard();
-        });
-
-        // Update Track Information
-        function updateTrackInfo() {
-            const trackName = document.getElementById('trackName');
-            const trackDetails = document.getElementById('trackDetails');
-
-            if (trackData.name) {
-                trackName.textContent = trackData.name;
-            }
-
-            let detailsHtml = '';
-
-            if (trackData.length) {
-                detailsHtml += `
-                    <div class="track-stat">
-                        <span class="track-stat-label">Length</span>
-                        <span class="track-stat-value">${trackData.length}</span>
+    <!-- Live Leaderboard -->
+    <div class="col-xl-4">
+        <div class="card bg-secondary h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-trophy me-2"></i>Live Leaderboard
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="leaderboard">
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-hourglass-split fs-1"></i>
+                        <p class="mt-2">Warten auf Race-Daten...</p>
                     </div>
-                `;
-            }
+                </div>
+            </div>
+        </div>
+    </div>
 
-            if (trackData.reference_lap_time) {
-                detailsHtml += `
-                    <div class="track-stat">
-                        <span class="track-stat-label">Reference Time</span>
-                        <span class="track-stat-value">${formatTime(trackData.reference_lap_time)}</span>
+    <!-- Current Lap Times -->
+    <div class="col-12">
+        <div class="card bg-secondary">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-stopwatch me-2"></i>Aktuelle Rundenzeiten
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3" id="lapTimesContainer">
+                    <div class="col-12 text-center text-muted py-3">
+                        <i class="bi bi-clock-history fs-1"></i>
+                        <p class="mt-2">Keine Rundenzeiten verfügbar</p>
                     </div>
-                `;
-            }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
-            if (trackData.minimum_lap_time) {
-                detailsHtml += `
-                    <div class="track-stat">
-                        <span class="track-stat-label">Min Time</span>
-                        <span class="track-stat-value">${formatTime(trackData.minimum_lap_time)}</span>
-                    </div>
-                `;
-            }
-
-            if (trackData.maximum_lap_time) {
-                detailsHtml += `
-                    <div class="track-stat">
-                        <span class="track-stat-label">Max Time</span>
-                        <span class="track-stat-value">${formatTime(trackData.maximum_lap_time)}</span>
-                    </div>
-                `;
-            }
-
-            if (trackData.pitstop_delta) {
-                detailsHtml += `
-                    <div class="track-stat">
-                        <span class="track-stat-label">Pitstop Delta</span>
-                        <span class="track-stat-value">${formatTime(trackData.pitstop_delta)}</span>
-                    </div>
-                `;
-            }
-
-            trackDetails.innerHTML = detailsHtml;
-        }
-
-        // Update Dashboard
-        function updateDashboard() {
-            updateRaceStatus();
-            updateLeaderboard();
-        }
-
-        function updateRaceStatus() {
-            if (!raceData.drivers) return;
-
-            const drivers = raceData.drivers;
-            const activeDrivers = drivers.length;
-            const totalLaps = drivers.reduce((sum, driver) => sum + (driver.laps || 0), 0);
-
-            // Best lap time
-            let bestLap = null;
-            drivers.forEach(driver => {
-                if (driver.best_lap_time && (!bestLap || driver.best_lap_time < bestLap)) {
-                    bestLap = driver.best_lap_time;
-                }
-            });
-
-            document.getElementById('activeDrivers').textContent = activeDrivers;
-            document.getElementById('totalLaps').textContent = totalLaps;
-            document.getElementById('bestLap').textContent = bestLap ? formatTime(bestLap) : '-';
-
-            // Race time (could be calculated from timestamp)
-            if (raceData.timestamp) {
-                const now = new Date();
-                const start = new Date(raceData.timestamp);
-                const duration = Math.floor((now - start) / 1000);
-                document.getElementById('raceTime').textContent = formatDuration(duration);
-            }
-        }
-
-        function updateLeaderboard() {
-            const leaderboardContent = document.getElementById('leaderboardContent');
-
-            if (!raceData.drivers || raceData.drivers.length === 0) {
-                leaderboardContent.innerHTML = '<div class="no-data">No drivers data available</div>';
-                return;
-            }
-
-            // Sort drivers by position
-            const sortedDrivers = [...raceData.drivers].sort((a, b) => (a.position || 999) - (b.position || 999));
-
-            let leaderboardHtml = '';
-            sortedDrivers.forEach(driver => {
-                const lapTimeClass = getLapTimeClass(driver.best_lap_time);
-                
-                leaderboardHtml += `
-                    <div class="driver-row position-${driver.position || 999}">
-                        <div class="position">${driver.position || '-'}</div>
-                        <div class="driver-name">${driver.name || 'Unknown Driver'}</div>
-                        <div class="laps">${driver.laps || 0}</div>
-                        <div class="lap-time ${lapTimeClass}">${formatTime(driver.best_lap_time || driver.last_lap_time)}</div>
-                    </div>
-                `;
-            });
-
-            leaderboardContent.innerHTML = leaderboardHtml;
-        }
-
-        function getLapTimeClass(lapTime) {
-            if (!lapTime || !trackData.reference_lap_time) return '';
-
-            if (lapTime < trackData.reference_lap_time) {
-                return 'reference-beat';
-            }
-
-            // Check if it's the best lap overall
-            if (raceData.drivers) {
-                const allTimes = raceData.drivers
-                    .map(d => d.best_lap_time)
-                    .filter(t => t)
-                    .sort((a, b) => a - b);
-                
-                if (allTimes.length > 0 && lapTime === allTimes[0]) {
-                    return 'best-lap';
-                }
-            }
-
-            return '';
-        }
-
-        // Utility Functions
-        function formatTime(milliseconds) {
-            if (!milliseconds || milliseconds === 0) return '-';
-            
-            const totalSeconds = milliseconds / 1000;
-            const minutes = Math.floor(totalSeconds / 60);
-            const seconds = (totalSeconds % 60).toFixed(3);
-            
-            if (minutes > 0) {
-                return `${minutes}:${seconds.padStart(6, '0')}`;
-            } else {
-                return `${seconds}s`;
-            }
-        }
-
-        function formatDuration(seconds) {
-            const hours = Math.floor(seconds / 3600);
-            const minutes = Math.floor((seconds % 3600) / 60);
-            const secs = seconds % 60;
-
-            if (hours > 0) {
-                return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-            } else {
-                return `${minutes}:${secs.toString().padStart(2, '0')}`;
-            }
-        }
-
-        // Auto-refresh fallback
-        setInterval(() => {
-            fetch('/api/live-data')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.track_data && Object.keys(data.track_data).length > 0) {
-                        trackData = data.track_data;
-                        updateTrackInfo();
-                    }
-                    if (data.race_data && Object.keys(data.race_data).length > 0) {
-                        raceData = data.race_data;
-                        updateDashboard();
-                    }
-                })
-                .catch(console.error);
-        }, 5000);
-    </script>
-</body>
-</html>
+{% block scripts %}
+<script>
+// Dashboard spezifische Initialisierung
+document.addEventListener('DOMContentLoaded', function() {
+    initializeDashboard();
+});
+</script>
+{% endblock %}
